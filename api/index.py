@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify, send_file
 from io import BytesIO
 from PIL import Image
-from core._2d_to_3d import process_image_2d_to_3d
+from core.converter import process_image_2d_to_3d
 from core.shape_drawing import draw_shape
 
 app = Flask(__name__)
