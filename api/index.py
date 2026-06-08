@@ -1,3 +1,4 @@
+import serverless_wsgi
 from flask import Flask, request, jsonify, send_file
 from io import BytesIO
 from PIL import Image
@@ -35,5 +36,5 @@ def api_draw_shape():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-if __name__ == '__main__':
-    app.run()
+def handler(event, context):
+    return serverless_wsgi.handle_request(app, event, context)
