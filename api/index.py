@@ -3,17 +3,9 @@ from flask_cors import CORS
 from io import BytesIO
 from PIL import Image
 import base64
-import traceback
 
 app = Flask(__name__)
 CORS(app)
-
-@app.errorhandler(Exception)
-def handle_exception(e):
-    tb = traceback.format_exc()
-    print(tb)
-    response = {'error': str(e)}
-    return jsonify(response), 500
 
 @app.route('/')
 def index():
@@ -23,7 +15,7 @@ def index():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/health', methods=['GET'])
+@app.route('/api/health')
 def health():
     return jsonify({'status': 'ok'})
 
@@ -35,9 +27,8 @@ def api_2d_to_3d():
     try:
         img_bytes = base64.b64decode(data['image'])
         img = Image.open(BytesIO(img_bytes))
-        # کاهش بسیار زیاد اندازه برای جلوگیری از timeout (۲۰۰px)
+        # فعلاً فقط تصویر را کوچک می‌کنیم و برمی‌گردانیم تا تابع پاسخ دهد
         img.thumbnail((200, 200))
-        # حالت ساده: فقط تصویر کوچک شده را برگردان
         buf = BytesIO()
         img.save(buf, 'PNG')
         buf.seek(0)
@@ -63,3 +54,6 @@ def api_draw_shape():
         return resp
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+if __name__ == '__main__':
+    app.run()
