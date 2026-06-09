@@ -84,7 +84,6 @@ def generate_obj(img, detail_strength=0.5, grid_res=80):
     depth_grid = np.clip(depth_grid, 0, 1)
 
     # ** معکوس‌سازی برای برجستگی صحیح (نواحی روشن بالا می‌آیند) **
-    depth_grid = 1.0 - depth_grid
 
     # 6. مش نهایی
     img_resized = img.resize((grid_res, grid_res), Image.LANCZOS)
@@ -134,7 +133,6 @@ def generate_obj(img, detail_strength=0.5, grid_res=80):
 
 def _simple_grid_mesh(img, depth_map, grid_res):
     # fallback
-    depth_map = 1.0 - depth_map   # invert depth
     width, height = img.size
     img_rs = img.resize((grid_res, grid_res), Image.LANCZOS)
     pixels = np.array(img_rs, dtype=np.float32) / 255.0
