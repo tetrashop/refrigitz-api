@@ -8,19 +8,20 @@ from core.converter import process_image_2d_to_3d
 from core.shape_drawing import draw_shape
 
 app = Flask(__name__)
-CORS(app)  # فعال‌سازی CORS برای همه مسیرها
+CORS(app)
 
+# تضمین خطای JSON با ساختار تخت
 @app.errorhandler(Exception)
 def handle_exception(e):
     tb = traceback.format_exc()
     print(tb)
     response = {
-        'error': str(e),
+        'error': str(e),        # همیشه رشته
         'type': type(e).__name__
     }
-    if hasattr(e, 'code'):
-        return jsonify(response), e.code
-    return jsonify(response), 500
+    # اگر خطای HTTP باشد کد وضعیت خودش را برمی‌گردانیم
+    code = getattr(e, 'code', 500)
+    return jsonify(response), code
 
 @app.route('/')
 def index():
@@ -28,11 +29,11 @@ def index():
         with open('index.html', 'r', encoding='utf-8') as f:
             return f.read()
     except Exception as e:
-        return jsonify({'error': 'Could not load interface'}), 500
+        return jsonify({'error': 'Could not load interface: ' + str(e)}), 500
 
 @app.route('/api/health', methods=['GET'])
 def health():
-    return jsonify({'status': 'ok', 'message': 'Refrigitz API is running'})
+    return jsonify({'status': 'ok'})
 
 @app.route('/api/2d-to-3d', methods=['POST'])
 def api_2d_to_3d():
@@ -42,15 +43,15 @@ def api_2d_to_3d():
     try:
         img_bytes = base64.b64decode(data['image'])
         img = Image.open(BytesIO(img_bytes))
-        # کاهش اندازه تصویر برای پردازش سریع‌تر (اختیاری)
-        img.thumbnail((500, 500))
+        img.thumbnail((500, 500))   # کاهش حجم برای سرعت
         result = process_image_2d_to_3d(img)
         buf = BytesIO()
         result.save(buf, 'PNG')
         buf.seek(0)
         return send_file(buf, mimetype='image/png')
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        # بازگشت مستقیم خطا با ساختار تخت
+        return jsonify({'error': str(e), 'type': type(e).__name__}), 500
 
 @app.route('/api/draw-shape', methods=['POST'])
 def api_draw_shape():
@@ -64,4 +65,4 @@ def api_draw_shape():
         buf.seek(0)
         return send_file(buf, mimetype='image/png')
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'type': type(e).__name__}), 500

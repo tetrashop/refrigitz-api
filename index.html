@@ -27,7 +27,6 @@
         .error-msg { color: #f87171; font-size: 0.9rem; margin-top: 0.5rem; display: none; background: #450a0a; padding: 0.6rem 1rem; border-radius: 0.5rem; }
         .success-msg { color: #4ade80; font-size: 0.9rem; margin-top: 0.5rem; display: none; background: #14532d; padding: 0.6rem 1rem; border-radius: 0.5rem; }
         .footer { text-align: center; margin-top: 2rem; color: #64748b; font-size: 0.85rem; }
-        @media (max-width: 480px) { .card { padding: 1.5rem; } .header h1 { font-size: 1.8rem; } }
     </style>
 </head>
 <body>
@@ -99,7 +98,7 @@
             }
         });
 
-        // Drag & Drop (خلاصه)
+        // Drag & Drop ساده
         const uploadArea = document.querySelector('.upload-area');
         uploadArea.addEventListener('dragover', e => { e.preventDefault(); uploadArea.style.background = '#0f172a'; });
         uploadArea.addEventListener('dragleave', e => { e.preventDefault(); uploadArea.style.background = ''; });
@@ -121,25 +120,29 @@
             button.textContent = loading ? '⏳ در حال پردازش...' : button.dataset.original;
         }
 
-        async function handleApiError(response, errorElement) {
-            let errorMessage = 'خطای ناشناخته';
+        // تابع جامع برای استخراج متن خطا از پاسخ (هر نوع پاسخی)
+        async function extractErrorMessage(response) {
             try {
                 const contentType = response.headers.get('content-type');
                 if (contentType && contentType.includes('application/json')) {
                     const data = await response.json();
-                    errorMessage = data.error || data.message || JSON.stringify(data);
+                    // تلاش برای دریافت رشتهٔ خطا
+                    if (typeof data === 'string') return data;
+                    if (typeof data.error === 'string') return data.error;
+                    if (typeof data.message === 'string') return data.message;
+                    // اگر هیچ‌کدام نبود، خود شیء را به رشته تبدیل کن
+                    return JSON.stringify(data);
                 } else {
                     const text = await response.text();
-                    errorMessage = text.substring(0, 200);
+                    // حذف تگ‌های HTML احتمالی و محدود کردن طول
+                    return text.replace(/<[^>]*>/g, '').substring(0, 300);
                 }
             } catch {
-                errorMessage = 'پاسخ سرور قابل پردازش نیست';
+                return 'پاسخ سرور قابل پردازش نیست';
             }
-            errorElement.textContent = '❌ ' + errorMessage;
-            errorElement.style.display = 'block';
         }
 
-        function convertTo3D() {
+        async function convertTo3D() {
             const btn = document.getElementById('btn3D');
             const errorEl = document.getElementById('error3D');
             const successEl = document.getElementById('success3D');
@@ -159,39 +162,34 @@
             }
 
             const reader = new FileReader();
-            reader.onload = function(e) {
+            reader.onload = async function(e) {
                 const base64 = e.target.result.split(',')[1];
-                fetch(BASE + '/api/2d-to-3d', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({image: base64})
-                })
-                .then(async res => {
+                try {
+                    const res = await fetch(BASE + '/api/2d-to-3d', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({image: base64})
+                    });
                     if (!res.ok) {
-                        await handleApiError(res, errorEl);
-                        setLoading(btn, false);
-                        return null;
+                        const errMsg = await extractErrorMessage(res);
+                        throw new Error(errMsg);
                     }
-                    return res.blob();
-                })
-                .then(blob => {
-                    if (blob) {
-                        resultImg.src = URL.createObjectURL(blob);
-                        resultImg.style.display = 'block';
-                        successEl.textContent = '✅ تصویر با موفقیت تبدیل شد.';
-                        successEl.style.display = 'block';
-                    }
-                })
-                .catch(err => {
-                    errorEl.textContent = '❌ خطای شبکه: ' + err.message;
+                    const blob = await res.blob();
+                    resultImg.src = URL.createObjectURL(blob);
+                    resultImg.style.display = 'block';
+                    successEl.textContent = '✅ تصویر با موفقیت تبدیل شد.';
+                    successEl.style.display = 'block';
+                } catch (err) {
+                    errorEl.textContent = '❌ ' + (err.message || 'خطای ناشناخته');
                     errorEl.style.display = 'block';
-                })
-                .finally(() => setLoading(btn, false));
+                } finally {
+                    setLoading(btn, false);
+                }
             };
             reader.readAsDataURL(file);
         }
 
-        function drawShape() {
+        async function drawShape() {
             const btn = document.getElementById('btnShape');
             const errorEl = document.getElementById('errorShape');
             const successEl = document.getElementById('successShape');
@@ -221,32 +219,27 @@
                 return;
             }
 
-            fetch(BASE + '/api/draw-shape', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({shape, color, params})
-            })
-            .then(async res => {
+            try {
+                const res = await fetch(BASE + '/api/draw-shape', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({shape, color, params})
+                });
                 if (!res.ok) {
-                    await handleApiError(res, errorEl);
-                    setLoading(btn, false);
-                    return null;
+                    const errMsg = await extractErrorMessage(res);
+                    throw new Error(errMsg);
                 }
-                return res.blob();
-            })
-            .then(blob => {
-                if (blob) {
-                    resultImg.src = URL.createObjectURL(blob);
-                    resultImg.style.display = 'block';
-                    successEl.textContent = '✅ شکل با موفقیت ترسیم شد.';
-                    successEl.style.display = 'block';
-                }
-            })
-            .catch(err => {
-                errorEl.textContent = '❌ خطای شبکه: ' + err.message;
+                const blob = await res.blob();
+                resultImg.src = URL.createObjectURL(blob);
+                resultImg.style.display = 'block';
+                successEl.textContent = '✅ شکل با موفقیت ترسیم شد.';
+                successEl.style.display = 'block';
+            } catch (err) {
+                errorEl.textContent = '❌ ' + (err.message || 'خطای ناشناخته');
                 errorEl.style.display = 'block';
-            })
-            .finally(() => setLoading(btn, false));
+            } finally {
+                setLoading(btn, false);
+            }
         }
     </script>
 </body>
