@@ -2,17 +2,16 @@ import numpy as np
 from PIL import Image
 from scipy.ndimage import gaussian_filter, zoom
 
-def generate_obj(img, smooth_sigma=3.0, upsample=2):
+def generate_obj(img, blur_sigma=2.0, detail_strength=0.45, upsample=2):
     """
-    تولید مش سه‌بعدی با سطح کاملاً هموار و طبیعی:
-    - عمق = روشنایی تصویر با هموارسازی قوی (حذف نویز و لبه‌های تیز)
-    - افزایش تراکم نقاط با درون‌یابی (upsample)
-    - محاسبه نرمال‌های رأسی برای سایه‌زنی صاف
+    تولید مش سه‌بعدی با روش Unsharp Masking:
+    - فرم کلی صاف (blurred) + جزئیات (detail) = عمق طبیعی
+    - افزایش تراکم نقاط (upsample) برای سطح صاف
+    - نرمال‌های رأسی برای سایه‌زنی نرم
     """
     img = img.convert('RGB')
     width, height = img.size
-    # رزولوشن پایه (قبل از upsample)
-    base_res = 60
+    base_res = 80  # رزولوشن پایه
     if width > base_res or height > base_res:
         ratio = min(base_res / width, base_res / height)
         width, height = int(width * ratio), int(height * ratio)
@@ -20,20 +19,28 @@ def generate_obj(img, smooth_sigma=3.0, upsample=2):
 
     pixels = np.array(img, dtype=np.float32) / 255.0
 
-    # محاسبه روشنایی (Luminance)
+    # روشنایی (Luminance)
     gray = 0.299 * pixels[:,:,0] + 0.587 * pixels[:,:,1] + 0.114 * pixels[:,:,2]
 
-    # هموارسازی قوی نقشهٔ عمق (حذف نوسانات تیز)
-    depth = gaussian_filter(gray, sigma=smooth_sigma)
+    # ۱. فرم کلی صاف (Blur قوی)
+    blurred = gaussian_filter(gray, sigma=blur_sigma)
 
-    # نرمال‌سازی مجدد به بازهٔ [0,1]
+    # ۲. جزئیات (تفاوت تصویر اصلی با Blur)
+    detail = gray - blurred
+
+    # ۳. فیلتر جزئیات برای کاهش نویز (Blur ملایم)
+    detail_smooth = gaussian_filter(detail, sigma=0.5)
+
+    # ۴. ترکیب نهایی
+    depth = blurred + detail_smooth * detail_strength
+
+    # نرمال‌سازی مجدد به [0,1]
     depth = (depth - depth.min()) / (depth.max() - depth.min() + 1e-9)
 
-    # افزایش وضوح برای سطح صاف‌تر (درون‌یابی بیکوبیک)
+    # افزایش وضوح (درون‌یابی بیکوبیک)
     if upsample > 1:
-        depth = zoom(depth, upsample, order=2)  # bicubic
+        depth = zoom(depth, upsample, order=2)
         new_h, new_w = depth.shape
-        # بزرگ‌کردن تصویر اصلی برای رنگ‌ها
         img_big = img.resize((new_w, new_h), Image.BICUBIC)
         pixels = np.array(img_big, dtype=np.float32) / 255.0
         width, height = new_w, new_h
@@ -65,7 +72,7 @@ def generate_obj(img, smooth_sigma=3.0, upsample=2):
             faces.append((idx0, idx3, idx2))
     faces = np.array(faces)
 
-    # محاسبه نرمال‌های رأسی (میانگین‌گیری از وجه‌های همسایه)
+    # نرمال‌های رأسی
     normals_per_vertex = np.zeros_like(vertices)
     count = np.zeros(len(vertices), dtype=int)
     for tri in faces:
@@ -79,8 +86,8 @@ def generate_obj(img, smooth_sigma=3.0, upsample=2):
     normals_per_vertex[mask] /= count[mask, np.newaxis]
     normals_per_vertex[~mask] = np.array([0, 0, 1])
 
-    # نوشتن OBJ با نرمال‌ها و رنگ‌ها
-    lines = ["# Refrigitz Olympic Smooth Relief (No spikes)"]
+    # نوشتن OBJ
+    lines = ["# Refrigitz Olympic - Natural Relief with Detail"]
     for v, c, n in zip(vertices, colors, normals_per_vertex):
         lines.append(f"v {v[0]:.4f} {v[1]:.4f} {v[2]:.4f} {c[0]:.4f} {c[1]:.4f} {c[2]:.4f}")
         lines.append(f"vn {n[0]:.4f} {n[1]:.4f} {n[2]:.4f}")
