@@ -1,16 +1,15 @@
 import numpy as np
 from PIL import Image
-from scipy.ndimage import gaussian_filter, sobel, binary_erosion
-from scipy.interpolate import griddata, NearestNDInterpolator
-from sklearn.neighbors import NearestNeighbors
+from scipy.ndimage import gaussian_filter, sobel
 
-def generate_obj(img, detail_strength=0.6, grid_res=80, invert=False):
+def generate_obj(img, invert=False, grid_res=80):
     """
-    مدل سه‌بعدی با جزئیات علامت‌دار:
-    - نواحی روشن برآمده، نواحی تاریک فرو رفته.
-    - پس‌زمینه در ارتفاع متوسط.
+    مدل سه‌بعدی مبتنی بر لبه‌های هموار (جهت‌خنثی):
+    - هر جا تغییرات شدت نور (لبه) وجود داشته باشد → ارتفاع ملایم
+    - پس‌زمینه صاف و بدون برجستگی
+    - روشن یا تاریک بودن ناحیه تأثیری در جهت ارتفاع ندارد
     """
-    img = img.convert('RGB')
+    img = img.convert('L')  #灰度
     width, height = img.size
     max_dim = 100
     if max(width, height) > max_dim:
@@ -18,89 +17,41 @@ def generate_obj(img, detail_strength=0.6, grid_res=80, invert=False):
         width, height = int(width * ratio), int(height * ratio)
         img = img.resize((width, height), Image.LANCZOS)
 
-    pixels = np.array(img, dtype=np.float32) / 255.0
-    gray = 0.299 * pixels[:,:,0] + 0.587 * pixels[:,:,1] + 0.114 * pixels[:,:,2]
+    gray = np.array(img, dtype=np.float32) / 255.0
 
-    # ۱. محاسبهٔ جزئیات علامت‌دار
-    blurred = gaussian_filter(gray, sigma=2.0)
-    detail = gray - blurred                 # مثبت = روشن‌تر از اطراف (برآمدگی)
-    if invert:
-        detail = -detail
-
-    # ۲. مقیاس‌دهی عمق: 0.5 = پس‌زمینه, بازهٔ [0,1] تقریبی
-    depth_base = detail * detail_strength + 0.5
-    depth_base = np.clip(depth_base, 0.0, 1.0)
-
-    # ۳. تشخیص لبه‌ها برای برازش خط (اختیاری)
+    # ۱. محاسبهٔ قدرت لبه (Sobel)
     edges_x = sobel(gray, axis=0)
     edges_y = sobel(gray, axis=1)
     edge_mag = np.sqrt(edges_x**2 + edges_y**2)
-    edge_binary = edge_mag > np.percentile(edge_mag, 80)
-    edge_binary = binary_erosion(edge_binary, iterations=1)
 
-    ys, xs = np.where(edge_binary)
-    edge_points = []
-    for x, y in zip(xs, ys):
-        z = depth_base[y, x]
-        edge_points.append((x, y, z))
-    edge_points = np.array(edge_points)
+    # ۲. هموارسازی قوی برای حذف نوک‌های تیز (تبدیل به تپه‌های ملایم)
+    depth = gaussian_filter(edge_mag, sigma=4.0)
 
-    if len(edge_points) < 10:
-        return _simple_grid_mesh(img, depth_base, grid_res)
+    # ۳. نرمال‌سازی به [0,1]
+    depth = (depth - depth.min()) / (depth.max() - depth.min() + 1e-9)
 
-    # ۴. برازش خط و تولید نقاط جدید
-    new_points = []
-    stride = max(1, len(edge_points) // 200)
-    neigh = NearestNeighbors(n_neighbors=10)
-    neigh.fit(edge_points)
-    for i in range(0, len(edge_points), stride):
-        pt = edge_points[i].reshape(1, -1)
-        dist, idx = neigh.kneighbors(pt)
-        neighbors = edge_points[idx[0, 1:]]
-        if len(neighbors) < 3:
-            continue
-        mean = neighbors.mean(axis=0)
-        centered = neighbors - mean
-        cov = np.cov(centered.T)
-        eigenvalues, eigenvectors = np.linalg.eigh(cov)
-        direction = eigenvectors[:, -1]
-        t_vals = np.linspace(-3, 3, 7)
-        for t in t_vals:
-            new_pt = pt[0] + direction * t
-            nx, ny = new_pt[0], new_pt[1]
-            if 0 <= nx < width and 0 <= ny < height:
-                new_points.append(new_pt)
-    if new_points:
-        new_points = np.array(new_points)
-        all_points = np.vstack([edge_points, new_points])
-    else:
-        all_points = edge_points
+    # ۴. معکوس‌سازی (اختیاری)
+    if invert:
+        depth = 1.0 - depth
 
-    # ۵. درون‌یابی روی شبکهٔ یکنواخت
-    grid_x = np.linspace(0, width-1, grid_res)
-    grid_y = np.linspace(0, height-1, grid_res)
-    grid_xx, grid_yy = np.meshgrid(grid_x, grid_y)
-    depth_grid = griddata(
-        (all_points[:, 0], all_points[:, 1]), all_points[:, 2],
-        (grid_xx, grid_yy), method='linear', fill_value=0.5
-    )
-    nan_mask = np.isnan(depth_grid)
-    if np.any(nan_mask):
-        interp = NearestNDInterpolator(all_points[:, :2], all_points[:, 2])
-        depth_grid[nan_mask] = interp(grid_xx[nan_mask], grid_yy[nan_mask])
-    depth_grid = np.clip(depth_grid, 0.0, 1.0)
+    # ۵. افزایش وضوح به grid_res با درون‌یابی بیکوبیک
+    from scipy.ndimage import zoom
+    depth_map = zoom(depth, grid_res / max(width, height), order=2)[:grid_res, :grid_res]
+    depth_map = np.clip(depth_map, 0, 1)
 
-    # ۶. مش نهایی
-    img_resized = img.resize((grid_res, grid_res), Image.LANCZOS)
-    colors = np.array(img_resized, dtype=np.float32) / 255.0
+    # ۶. ساخت مش
+    # تصویر رنگی اصلی را به اندازه grid_res تغییر دهیم
+    img_rgb = img.resize((grid_res, grid_res), Image.LANCZOS)
+    colors = np.array(img_rgb, dtype=np.float32) / 255.0
 
     x = np.linspace(0, 100, grid_res)
     y = np.linspace(0, 100, grid_res)
     xx, yy = np.meshgrid(x, y)
-    zz = depth_grid * 40.0  # مقیاس عمق
+    zz = depth_map * 40.0  # مقیاس عمق
 
     vertices = np.stack([xx, yy, zz], axis=-1).reshape(-1, 3)
 
+    # مثلث‌بندی
     faces = []
     for i in range(grid_res - 1):
         for j in range(grid_res - 1):
@@ -126,52 +77,12 @@ def generate_obj(img, detail_strength=0.6, grid_res=80, invert=False):
     normals[mask] /= cnt[mask, np.newaxis]
     normals[~mask] = np.array([0, 0, 1])
 
-    lines = ["# Refrigitz Signed Relief (bright=high, dark=low)"]
+    # نوشتن OBJ
+    lines = ["# Refrigitz Edge-Based Relief (Direction Neutral)"]
     for v, c, n in zip(vertices, colors.reshape(-1, 3), normals):
         lines.append(f"v {v[0]:.4f} {v[1]:.4f} {v[2]:.4f} {c[0]:.4f} {c[1]:.4f} {c[2]:.4f}")
         lines.append(f"vn {n[0]:.4f} {n[1]:.4f} {n[2]:.4f}")
     for f in faces:
         lines.append(f"f {f[0]+1}//{f[0]+1} {f[1]+1}//{f[1]+1} {f[2]+1}//{f[2]+1}")
 
-    return "\n".join(lines).encode('utf-8')
-
-
-def _simple_grid_mesh(img, depth_map, grid_res):
-    # fallback ساده
-    width, height = img.size
-    img_rs = img.resize((grid_res, grid_res), Image.LANCZOS)
-    pixels = np.array(img_rs, dtype=np.float32) / 255.0
-    x = np.linspace(0, 100, grid_res)
-    y = np.linspace(0, 100, grid_res)
-    xx, yy = np.meshgrid(x, y)
-    zz = depth_map * 40.0
-    vertices = np.stack([xx, yy, zz], axis=-1).reshape(-1, 3)
-    faces = []
-    for i in range(grid_res-1):
-        for j in range(grid_res-1):
-            a = i*grid_res + j
-            b = a + 1
-            c = (i+1)*grid_res + j
-            d = c + 1
-            faces.append((a,b,d))
-            faces.append((a,d,c))
-    faces = np.array(faces)
-    normals = np.zeros_like(vertices)
-    cnt = np.zeros(len(vertices), dtype=int)
-    for tri in faces:
-        v0,v1,v2 = vertices[tri[0]], vertices[tri[1]], vertices[tri[2]]
-        n = np.cross(v1-v0, v2-v0)
-        n /= (np.linalg.norm(n)+1e-9)
-        for idx in tri:
-            normals[idx] += n
-            cnt[idx] += 1
-    mask = cnt>0
-    normals[mask] /= cnt[mask, np.newaxis]
-    normals[~mask] = np.array([0,0,1])
-    lines = ["# Simple Signed Mesh"]
-    for v,c,n in zip(vertices, pixels.reshape(-1,3), normals):
-        lines.append(f"v {v[0]:.4f} {v[1]:.4f} {v[2]:.4f} {c[0]:.4f} {c[1]:.4f} {c[2]:.4f}")
-        lines.append(f"vn {n[0]:.4f} {n[1]:.4f} {n[2]:.4f}")
-    for f in faces:
-        lines.append(f"f {f[0]+1}//{f[0]+1} {f[1]+1}//{f[1]+1} {f[2]+1}//{f[2]+1}")
     return "\n".join(lines).encode('utf-8')
