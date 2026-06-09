@@ -25,7 +25,7 @@
         .input-group label { display: block; font-size: 0.9rem; margin-bottom: 0.3rem; color: #94a3b8; }
         .input-group input, .input-group select { width: 100%; padding: 0.7rem 1rem; border-radius: 0.7rem; border: 1px solid #475569; background: #0f172a; color: #e2e8f0; font-size: 1rem; }
         .result-img { width: 100%; margin-top: 1rem; border-radius: 0.8rem; display: none; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
-        .error-msg { color: #f87171; font-size: 0.9rem; margin-top: 0.5rem; display: none; }
+        .error-msg { color: #f87171; font-size: 0.9rem; margin-top: 0.5rem; display: none; background: #450a0a; padding: 0.6rem 1rem; border-radius: 0.5rem; }
         .footer { text-align: center; margin-top: 2rem; color: #64748b; font-size: 0.85rem; }
         @media (max-width: 480px) { .card { padding: 1.5rem; } .header h1 { font-size: 1.8rem; } }
     </style>
@@ -42,7 +42,7 @@
             <h2>📷 تبدیل تصویر دوبعدی به سه‌بعدی</h2>
             <div class="upload-area" id="upload3D" onclick="document.getElementById('imageUpload').click()">
                 <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 24 24' fill='%2394a3b8'%3E%3Cpath d='M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z'/%3E%3C/svg%3E" alt="آپلود">
-                <p>برای انتخاب تصویر کلیک کنید</p>
+                <p>برای انتخاب تصویر کلیک کنید یا فایل را اینجا رها کنید</p>
             </div>
             <input type="file" id="imageUpload" accept="image/*">
             <p id="fileName3D" style="color:#94a3b8;font-size:0.9rem;margin-bottom:1rem;display:none;"></p>
@@ -85,19 +85,19 @@
     <script>
         const BASE = window.location.origin;
 
-        // نمایش نام فایل انتخاب شده
+        // نمایش نام فایل
         document.getElementById('imageUpload').addEventListener('change', function(e) {
-            const fileName = e.target.files[0]?.name;
+            const file = e.target.files[0];
             const label = document.getElementById('fileName3D');
-            if (fileName) {
-                label.textContent = '📎 ' + fileName;
+            if (file) {
+                label.textContent = '📎 ' + file.name;
                 label.style.display = 'block';
             } else {
                 label.style.display = 'none';
             }
         });
 
-        // Drag & Drop برای آپلود
+        // Drag & Drop
         const uploadArea = document.getElementById('upload3D');
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
             uploadArea.addEventListener(eventName, e => {
@@ -122,6 +122,24 @@
         function setLoading(button, loading) {
             button.disabled = loading;
             button.textContent = loading ? '⏳ در حال پردازش...' : button.dataset.original;
+        }
+
+        async function handleApiError(response, errorElement) {
+            let errorMessage = 'خطای ناشناخته';
+            try {
+                const contentType = response.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    const data = await response.json();
+                    errorMessage = data.error || data.message || JSON.stringify(data);
+                } else {
+                    const text = await response.text();
+                    errorMessage = text.substring(0, 200); // بخش اول پاسخ
+                }
+            } catch {
+                errorMessage = 'پاسخ سرور قابل پردازش نیست';
+            }
+            errorElement.textContent = '❌ ' + errorMessage;
+            errorElement.style.display = 'block';
         }
 
         function convertTo3D() {
@@ -151,17 +169,19 @@
                 })
                 .then(async res => {
                     if (!res.ok) {
-                        const err = await res.json();
-                        throw new Error(err.error || 'خطای سرور');
+                        await handleApiError(res, errorEl);
+                        return;
                     }
                     return res.blob();
                 })
                 .then(blob => {
-                    resultImg.src = URL.createObjectURL(blob);
-                    resultImg.style.display = 'block';
+                    if (blob) {
+                        resultImg.src = URL.createObjectURL(blob);
+                        resultImg.style.display = 'block';
+                    }
                 })
                 .catch(err => {
-                    errorEl.textContent = '❌ ' + err.message;
+                    errorEl.textContent = '❌ خطای شبکه: ' + err.message;
                     errorEl.style.display = 'block';
                 })
                 .finally(() => setLoading(btn, false));
@@ -204,17 +224,19 @@
             })
             .then(async res => {
                 if (!res.ok) {
-                    const err = await res.json();
-                    throw new Error(err.error || 'خطای سرور');
+                    await handleApiError(res, errorEl);
+                    return;
                 }
                 return res.blob();
             })
             .then(blob => {
-                resultImg.src = URL.createObjectURL(blob);
-                resultImg.style.display = 'block';
+                if (blob) {
+                    resultImg.src = URL.createObjectURL(blob);
+                    resultImg.style.display = 'block';
+                }
             })
             .catch(err => {
-                errorEl.textContent = '❌ ' + err.message;
+                errorEl.textContent = '❌ خطای شبکه: ' + err.message;
                 errorEl.style.display = 'block';
             })
             .finally(() => setLoading(btn, false));
