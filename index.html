@@ -11,22 +11,23 @@
         .header { text-align: center; margin-bottom: 2.5rem; }
         .header h1 { font-size: 2.2rem; font-weight: 800; background: linear-gradient(to left, #38bdf8, #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
         .card { background: #1e293b; border-radius: 1.2rem; padding: 2rem; margin-bottom: 1.5rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); border: 1px solid #334155; }
-        .card h2 { font-size: 1.4rem; margin-bottom: 1.5rem; color: #f1f5f9; display: flex; align-items: center; gap: 0.5rem; }
+        .card h2 { font-size: 1.4rem; margin-bottom: 1.5rem; color: #f1f5f9; }
         .upload-area { border: 2px dashed #475569; border-radius: 1rem; padding: 2rem 1rem; text-align: center; cursor: pointer; transition: background 0.2s; margin-bottom: 1rem; }
         .upload-area:hover { background: #0f172a; border-color: #38bdf8; }
         .upload-area img { width: 48px; margin-bottom: 0.5rem; opacity: 0.7; }
         .upload-area p { color: #94a3b8; font-size: 0.95rem; }
         input[type="file"] { display: none; }
-        .btn { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.75rem 1.8rem; border: none; border-radius: 0.8rem; font-size: 1rem; font-weight: 600; cursor: pointer; transition: all 0.2s; background: #2563eb; color: white; width: 100%; justify-content: center; }
-        .btn:hover { background: #1d4ed8; transform: scale(1.02); }
+        .btn { padding: 0.75rem 1.8rem; border: none; border-radius: 0.8rem; font-size: 1rem; font-weight: 600; cursor: pointer; background: #2563eb; color: white; width: 100%; margin-top: 0.5rem; }
+        .btn.download { background: #059669; }
         .btn:disabled { opacity: 0.5; pointer-events: none; }
         .input-group { margin-bottom: 1rem; }
         .input-group label { display: block; font-size: 0.9rem; margin-bottom: 0.3rem; color: #94a3b8; }
         .input-group input, .input-group select { width: 100%; padding: 0.7rem 1rem; border-radius: 0.7rem; border: 1px solid #475569; background: #0f172a; color: #e2e8f0; font-size: 1rem; }
-        .result-img { width: 100%; margin-top: 1rem; border-radius: 0.8rem; display: none; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
-        .error-msg { color: #f87171; font-size: 0.9rem; margin-top: 0.5rem; display: none; background: #450a0a; padding: 0.6rem 1rem; border-radius: 0.5rem; }
-        .success-msg { color: #4ade80; font-size: 0.9rem; margin-top: 0.5rem; display: none; background: #14532d; padding: 0.6rem 1rem; border-radius: 0.5rem; }
+        .result-img { width: 100%; margin-top: 1rem; border-radius: 0.8rem; display: none; }
+        .error-msg { color: #f87171; font-size: 0.9rem; margin-top: 0.5rem; display: none; background: #450a0a; padding: 0.6rem; border-radius: 0.5rem; }
+        .success-msg { color: #4ade80; font-size: 0.9rem; margin-top: 0.5rem; display: none; background: #14532d; padding: 0.6rem; border-radius: 0.5rem; }
         .footer { text-align: center; margin-top: 2rem; color: #64748b; font-size: 0.85rem; }
+        .download-link { display: none; }
     </style>
 </head>
 <body>
@@ -35,22 +36,21 @@
             <h1>🏆 Refrigitz Graphic</h1>
             <p style="color: #64748b;">نسخه المپیک – پردازش تصویر و ترسیم اشکال</p>
         </div>
-
-        <!-- کارت تبدیل ۲بعدی به ۳بعدی -->
+        <!-- کارت تبدیل -->
         <div class="card">
             <h2>📷 تبدیل تصویر دوبعدی به سه‌بعدی</h2>
             <div class="upload-area" onclick="document.getElementById('imageUpload').click()">
                 <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 24 24' fill='%2394a3b8'%3E%3Cpath d='M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z'/%3E%3C/svg%3E" alt="آپلود">
-                <p>برای انتخاب تصویر کلیک کنید یا فایل را اینجا رها کنید</p>
+                <p>برای انتخاب تصویر کلیک کنید</p>
             </div>
             <input type="file" id="imageUpload" accept="image/*">
             <p id="fileName3D" style="color:#94a3b8;font-size:0.9rem;margin-bottom:1rem;display:none;"></p>
             <button class="btn" id="btn3D" onclick="convertTo3D()">✨ تبدیل به سه‌بعدی</button>
+            <a class="btn download" id="download3D" style="display:none;" download="refrigitz-3d.png">⬇️ دانلود تصویر سه‌بعدی</a>
             <p class="error-msg" id="error3D"></p>
             <p class="success-msg" id="success3D"></p>
-            <img class="result-img" id="result3D" alt="نتیجه تبدیل سه‌بعدی">
+            <img class="result-img" id="result3D" alt="نتیجه">
         </div>
-
         <!-- کارت ترسیم شکل -->
         <div class="card">
             <h2>✏️ ترسیم شکل دوبعدی</h2>
@@ -66,180 +66,108 @@
             </div>
             <div class="input-group">
                 <label>رنگ</label>
-                <input type="text" id="colorInput" value="#3b82f6" placeholder="blue یا #ff0000">
+                <input type="text" id="colorInput" value="#3b82f6">
             </div>
             <div class="input-group">
-                <label>پارامترها (با کاما جدا کنید)</label>
-                <input type="text" id="paramsInput" value="50,50,200,150" placeholder="50,50,200,150">
+                <label>پارامترها (با کاما)</label>
+                <input type="text" id="paramsInput" value="50,50,200,150">
             </div>
             <button class="btn" id="btnShape" onclick="drawShape()">🎨 ترسیم</button>
             <p class="error-msg" id="errorShape"></p>
             <p class="success-msg" id="successShape"></p>
-            <img class="result-img" id="resultShape" alt="شکل ترسیم شده">
+            <img class="result-img" id="resultShape" alt="شکل">
         </div>
-
-        <div class="footer">
-            ساخته شده با ❤️ توسط تیم Refrigitz – تحت مجوز MIT
-        </div>
+        <div class="footer">ساخته شده با ❤️ توسط تیم Refrigitz</div>
     </div>
-
     <script>
         const BASE = window.location.origin;
-
-        // نمایش نام فایل
         document.getElementById('imageUpload').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            const label = document.getElementById('fileName3D');
-            if (file) {
-                label.textContent = '📎 ' + file.name;
-                label.style.display = 'block';
-            } else {
-                label.style.display = 'none';
-            }
+            const f = e.target.files[0];
+            const l = document.getElementById('fileName3D');
+            if (f) { l.textContent = '📎 ' + f.name; l.style.display = 'block'; }
+            else l.style.display = 'none';
         });
-
-        // Drag & Drop ساده
-        const uploadArea = document.querySelector('.upload-area');
-        uploadArea.addEventListener('dragover', e => { e.preventDefault(); uploadArea.style.background = '#0f172a'; });
-        uploadArea.addEventListener('dragleave', e => { e.preventDefault(); uploadArea.style.background = ''; });
-        uploadArea.addEventListener('drop', e => {
-            e.preventDefault();
-            uploadArea.style.background = '';
-            const file = e.dataTransfer.files[0];
-            if (file) {
-                const dt = new DataTransfer();
-                dt.items.add(file);
-                document.getElementById('imageUpload').files = dt.files;
-                document.getElementById('fileName3D').textContent = '📎 ' + file.name;
-                document.getElementById('fileName3D').style.display = 'block';
-            }
-        });
-
-        function setLoading(button, loading) {
-            button.disabled = loading;
-            button.textContent = loading ? '⏳ در حال پردازش...' : button.dataset.original;
-        }
-
-        // تابع جامع برای استخراج متن خطا از پاسخ (هر نوع پاسخی)
-        async function extractErrorMessage(response) {
+        function setLoading(btn, loading) { btn.disabled = loading; btn.textContent = loading ? '⏳ ...' : btn.dataset.original; }
+        async function extractError(res) {
             try {
-                const contentType = response.headers.get('content-type');
-                if (contentType && contentType.includes('application/json')) {
-                    const data = await response.json();
-                    // تلاش برای دریافت رشتهٔ خطا
-                    if (typeof data === 'string') return data;
-                    if (typeof data.error === 'string') return data.error;
-                    if (typeof data.message === 'string') return data.message;
-                    // اگر هیچ‌کدام نبود، خود شیء را به رشته تبدیل کن
-                    return JSON.stringify(data);
-                } else {
-                    const text = await response.text();
-                    // حذف تگ‌های HTML احتمالی و محدود کردن طول
-                    return text.replace(/<[^>]*>/g, '').substring(0, 300);
+                const ct = res.headers.get('content-type');
+                if (ct && ct.includes('application/json')) {
+                    const d = await res.json();
+                    return typeof d === 'string' ? d : (d.error || JSON.stringify(d));
                 }
-            } catch {
-                return 'پاسخ سرور قابل پردازش نیست';
-            }
+                return (await res.text()).replace(/<[^>]*>/g, '').substring(0, 200);
+            } catch { return 'Unknown error'; }
         }
-
+        // تبدیل به ۳بعدی + دکمه دانلود
         async function convertTo3D() {
             const btn = document.getElementById('btn3D');
-            const errorEl = document.getElementById('error3D');
-            const successEl = document.getElementById('success3D');
-            const resultImg = document.getElementById('result3D');
-            errorEl.style.display = 'none';
-            successEl.style.display = 'none';
-            resultImg.style.display = 'none';
-            btn.dataset.original = btn.textContent;
-            setLoading(btn, true);
-
+            const errEl = document.getElementById('error3D');
+            const succEl = document.getElementById('success3D');
+            const img = document.getElementById('result3D');
+            const downloadLink = document.getElementById('download3D');
+            errEl.style.display = 'none'; succEl.style.display = 'none'; img.style.display = 'none';
+            downloadLink.style.display = 'none';
+            btn.dataset.original = btn.textContent; setLoading(btn, true);
             const file = document.getElementById('imageUpload').files[0];
-            if (!file) {
-                errorEl.textContent = 'لطفاً یک تصویر انتخاب کنید.';
-                errorEl.style.display = 'block';
-                setLoading(btn, false);
-                return;
-            }
-
+            if (!file) { errEl.textContent = 'تصویری انتخاب نشده'; errEl.style.display = 'block'; setLoading(btn, false); return; }
             const reader = new FileReader();
             reader.onload = async function(e) {
-                const base64 = e.target.result.split(',')[1];
+                const b64 = e.target.result.split(',')[1];
                 try {
                     const res = await fetch(BASE + '/api/2d-to-3d', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({image: base64})
+                        body: JSON.stringify({image: b64})
                     });
-                    if (!res.ok) {
-                        const errMsg = await extractErrorMessage(res);
-                        throw new Error(errMsg);
-                    }
+                    if (!res.ok) throw new Error(await extractError(res));
                     const blob = await res.blob();
-                    resultImg.src = URL.createObjectURL(blob);
-                    resultImg.style.display = 'block';
-                    successEl.textContent = '✅ تصویر با موفقیت تبدیل شد.';
-                    successEl.style.display = 'block';
-                } catch (err) {
-                    errorEl.textContent = '❌ ' + (err.message || 'خطای ناشناخته');
-                    errorEl.style.display = 'block';
-                } finally {
-                    setLoading(btn, false);
-                }
+                    const url = URL.createObjectURL(blob);
+                    img.src = url;
+                    img.style.display = 'block';
+                    downloadLink.href = url;
+                    downloadLink.style.display = 'block';
+                    succEl.textContent = '✅ موفق';
+                    succEl.style.display = 'block';
+                } catch (ex) {
+                    errEl.textContent = '❌ ' + ex.message;
+                    errEl.style.display = 'block';
+                } finally { setLoading(btn, false); }
             };
             reader.readAsDataURL(file);
         }
-
+        // ترسیم شکل
         async function drawShape() {
             const btn = document.getElementById('btnShape');
-            const errorEl = document.getElementById('errorShape');
-            const successEl = document.getElementById('successShape');
-            const resultImg = document.getElementById('resultShape');
-            errorEl.style.display = 'none';
-            successEl.style.display = 'none';
-            resultImg.style.display = 'none';
-            btn.dataset.original = btn.textContent;
-            setLoading(btn, true);
-
+            const errEl = document.getElementById('errorShape');
+            const succEl = document.getElementById('successShape');
+            const img = document.getElementById('resultShape');
+            errEl.style.display = 'none'; succEl.style.display = 'none'; img.style.display = 'none';
+            btn.dataset.original = btn.textContent; setLoading(btn, true);
             const shape = document.getElementById('shapeSelect').value;
             const color = document.getElementById('colorInput').value.trim();
-            const paramsStr = document.getElementById('paramsInput').value.trim();
-
-            if (!color) {
-                errorEl.textContent = 'لطفاً یک رنگ وارد کنید.';
-                errorEl.style.display = 'block';
+            const params = document.getElementById('paramsInput').value.split(',').map(s => parseFloat(s.trim()));
+            if (!color || params.some(isNaN)) {
+                errEl.textContent = 'ورودی نامعتبر';
+                errEl.style.display = 'block';
                 setLoading(btn, false);
                 return;
             }
-
-            const params = paramsStr.split(',').map(s => parseFloat(s.trim()));
-            if (params.some(isNaN)) {
-                errorEl.textContent = 'پارامترها باید اعداد معتبر باشند.';
-                errorEl.style.display = 'block';
-                setLoading(btn, false);
-                return;
-            }
-
             try {
                 const res = await fetch(BASE + '/api/draw-shape', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({shape, color, params})
                 });
-                if (!res.ok) {
-                    const errMsg = await extractErrorMessage(res);
-                    throw new Error(errMsg);
-                }
+                if (!res.ok) throw new Error(await extractError(res));
                 const blob = await res.blob();
-                resultImg.src = URL.createObjectURL(blob);
-                resultImg.style.display = 'block';
-                successEl.textContent = '✅ شکل با موفقیت ترسیم شد.';
-                successEl.style.display = 'block';
-            } catch (err) {
-                errorEl.textContent = '❌ ' + (err.message || 'خطای ناشناخته');
-                errorEl.style.display = 'block';
-            } finally {
-                setLoading(btn, false);
-            }
+                img.src = URL.createObjectURL(blob);
+                img.style.display = 'block';
+                succEl.textContent = '✅ موفق';
+                succEl.style.display = 'block';
+            } catch (ex) {
+                errEl.textContent = '❌ ' + ex.message;
+                errEl.style.display = 'block';
+            } finally { setLoading(btn, false); }
         }
     </script>
 </body>
