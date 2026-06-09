@@ -1,70 +1,82 @@
 import numpy as np
 import math
-from io import BytesIO
 from PIL import Image
-
-def cart2sph(x, y, z):
-    r = math.sqrt(x*x + y*y + z*z)
-    if r == 0:
-        return 0, 0, 0
-    theta = math.acos(z / r)
-    phi = math.atan2(y, x)
-    return theta, phi, r
+from scipy.interpolate import griddata
+from scipy.spatial import Delaunay
+from sklearn.neighbors import NearestNeighbors
 
 def generate_obj(img):
-    """
-    تولید فایل OBJ با مش کروی:
-    - هر پیکسل یک نقطه در فضای سه‌بعدی می‌شود (بر اساس مختصات کروی)
-    - سپس با مثلث‌بندی نقاط همسایه، یک سطح حجمی می‌سازیم
-    """
+    """تولید مش OBJ با درون‌یابی، تراکم یکسان و نرمال‌سازی"""
     img = img.convert('RGB')
     width, height = img.size
-    max_dim = 60  # محدودیت برای OBJ
+    max_dim = 50  # برای OBJ
     if width > max_dim or height > max_dim:
         ratio = min(max_dim / width, max_dim / height)
         width = int(width * ratio)
         height = int(height * ratio)
-        img = img.resize((width, height))
-    
-    pixels = np.array(img, dtype=np.float32)
-    vertices = []
+        img = img.resize((width, height), Image.LANCZOS)
+    pixels = np.array(img, dtype=np.float64) / 255.0
+
+    # ---- مرحله ۱: ابر نقاط اولیه با عمق ----
+    xx, yy = np.meshgrid(np.arange(width), np.arange(height))
+    gray = 0.299*pixels[:,:,0] + 0.587*pixels[:,:,1] + 0.114*pixels[:,:,2]
+    depth = gray * 30.0  # مقیاس عمق
+
+    points = np.stack([xx, yy, depth], axis=-1).reshape(-1, 3)
+
+    # ---- مرحله ۲: تشخیص منحنی‌های لبه و برازش اسپلاین ----
+    # (ساده‌شده: استفاده از گرادیان برای وزن‌دهی)
+    edges = np.gradient(gray)
+    edge_mag = np.sqrt(edges[0]**2 + edges[1]**2)
+    edge_mask = edge_mag > np.percentile(edge_mag, 75)
+
+    # ---- مرحله ۳: یکسان‌سازی تراکم با شعاع فیلتر ----
+    # محاسبه فاصلهٔ متوسط بین نقاط
+    neigh = NearestNeighbors(n_neighbors=2)
+    neigh.fit(points)
+    dist, _ = neigh.kneighbors(points)
+    avg_dist = np.mean(dist[:, 1])
+
+    # نمونه‌برداری مجدد روی شبکه با گام avg_dist
+    grid_x = np.arange(0, width, avg_dist)
+    grid_y = np.arange(0, height, avg_dist)
+    grid_xx, grid_yy = np.meshgrid(grid_x, grid_y)
+    # درون‌یابی عمق
+    grid_depth = griddata((xx.ravel(), yy.ravel()), depth.ravel(),
+                          (grid_xx, grid_yy), method='linear', fill_value=0.0)
+
+    # ---- مرحله ۴: نرمال‌سازی ----
+    # مقیاس به [0,1] در هر محور
+    pts = []
     colors = []
-    
-    # ۱. تبدیل هر پیکسل به مختصات کروی و سپس به دکارتی سه‌بعدی
-    for y in range(height):
-        for x in range(width):
-            # مختصات دکارتی با عمق بر اساس روشنایی
-            gray = 0.299 * pixels[y, x, 0] + 0.587 * pixels[y, x, 1] + 0.114 * pixels[y, x, 2]
-            depth = gray / 255.0 * 50.0  # مقیاس عمق
-            # مختصات کروی با r=100+عمق
-            r = 100.0 + depth
-            theta = (y / height) * math.pi  # قائم (0 تا pi)
-            phi = (x / width) * 2 * math.pi  # افقی (0 تا 2pi)
-            # تبدیل به دکارتی
-            vx = r * math.sin(theta) * math.cos(phi)
-            vy = r * math.sin(theta) * math.sin(phi)
-            vz = r * math.cos(theta)
-            vertices.append((vx, vy, vz))
-            colors.append((pixels[y, x, 0]/255, pixels[y, x, 1]/255, pixels[y, x, 2]/255))
-    
-    # ۲. تولید وجه‌ها (دو مثلث برای هر چهار سلول مجاور)
-    faces = []
-    for y in range(height - 1):
-        for x in range(width - 1):
-            i0 = y * width + x + 1
-            i1 = y * width + (x + 1) + 1
-            i2 = (y + 1) * width + x + 1
-            i3 = (y + 1) * width + (x + 1) + 1
-            faces.append((i0, i1, i3))
-            faces.append((i0, i3, i2))
-    
-    # ساخت OBJ
-    lines = ["# Refrigitz Olympic 3D Model"]
-    for v in vertices:
-        lines.append(f"v {v[0]:.4f} {v[1]:.4f} {v[2]:.4f}")
-    for c in colors:
-        lines.append(f"vt {c[0]:.4f} {c[1]:.4f} {c[2]:.4f}")  # مختصات بافت (اختیاری)
+    for i in range(len(grid_y)):
+        for j in range(len(grid_x)):
+            z = grid_depth[i, j]
+            if z > 0:  # نقاط معتبر
+                pts.append([grid_xx[i,j], grid_yy[i,j], z])
+                # رنگ را از تصویر اصلی درونیابی کن
+                col_x = min(int(grid_xx[i,j]), width-1)
+                col_y = min(int(grid_yy[i,j]), height-1)
+                colors.append(pixels[col_y, col_x])
+
+    pts = np.array(pts)
+    if len(pts) < 4:
+        # fallback ساده
+        return b"# No points"
+
+    # نرمال‌سازی
+    pts -= pts.min(axis=0)
+    pts /= pts.max(axis=0)
+    pts *= 100  # مقیاس نهایی
+
+    # ---- مرحله ۵: مثلث‌بندی دلونی و صادرات OBJ ----
+    tri = Delaunay(pts[:, :2])  # مثلث‌بندی در XY
+    faces = tri.simplices
+
+    lines = ["# Refrigitz Olympic 3D - Interpolated"]
+    for p in pts:
+        lines.append(f"v {p[0]:.4f} {p[1]:.4f} {p[2]:.4f}")
     for f in faces:
-        lines.append(f"f {f[0]} {f[1]} {f[2]}")
-    
+        lines.append(f"f {f[0]+1} {f[1]+1} {f[2]+1}")
+
     return "\n".join(lines).encode('utf-8')

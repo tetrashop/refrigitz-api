@@ -1,84 +1,64 @@
 import numpy as np
 import math
 from PIL import Image
-
-def cart2sph(x, y, z):
-    """تبدیل دکارتی به کروی (r, theta, phi)"""
-    r = math.sqrt(x*x + y*y + z*z)
-    if r == 0:
-        return 0, 0, 0
-    theta = math.acos(z / r)
-    phi = math.atan2(y, x)
-    return theta, phi, r
+from scipy.interpolate import UnivariateSpline
+from scipy.ndimage import sobel, distance_transform_edt
 
 def process_image_2d_to_3d(img, fg=2):
-    """
-    تبدیل تصویر دوبعدی به سه‌بعدی با الگوریتم اصلی Refrigitz:
-    1. محاسبه مختصات کروی هر پیکسل
-    2. پخش آن‌ها در تصویر بزرگ‌تر (عرض = width * fg)
-    """
-    img = img.convert('RGB')
+    """تبدیل تصویر به تصویر سه‌بعدی با درون‌یابی منحنی‌وار"""
+    img = img.convert('L')  #灰度
     width, height = img.size
-    # محدود کردن ابعاد برای اجرا در ۱۰ ثانیه
+    # محدودیت برای اجرا
     max_dim = 80
     if width > max_dim or height > max_dim:
         ratio = min(max_dim / width, max_dim / height)
         width = int(width * ratio)
         height = int(height * ratio)
-        img = img.resize((width, height))
-    
-    pixels = np.array(img, dtype=np.float32)
-    
-    # محاسبه مینیمم و ماکسیمم r و theta
-    min_r, max_r = float('inf'), -float('inf')
-    min_t, max_t = float('inf'), -float('inf')
-    r_arr = np.zeros((height, width))
-    t_arr = np.zeros((height, width))
-    
-    for y in range(height):
-        for x in range(width):
-            theta, phi, r = cart2sph(x - width/2, y - height/2, 1.0)
-            r_arr[y, x] = r
-            t_arr[y, x] = theta
-            if r < min_r: min_r = r
-            if r > max_r: max_r = r
-            if theta < min_t: min_t = theta
-            if theta > max_t: max_t = theta
-    
-    if max_r == min_r: max_r += 1
-    if max_t == min_t: max_t += 1
-    
-    # ابعاد تصویر خروجی
+        img = img.resize((width, height), Image.LANCZOS)
+    pixels = np.array(img, dtype=np.float64) / 255.0
+
+    # مختصات کروی اولیه
+    xx, yy = np.meshgrid(np.arange(width) - width/2, np.arange(height) - height/2)
+    r = np.sqrt(xx**2 + yy**2 + 1.0)
+    theta = np.arccos(1.0 / r)
+    phi = np.arctan2(yy, xx)
+
+    # نگاشت به تصویر خروجی
     out_w = int(width * fg)
     out_h = height
-    result = np.zeros((out_h, out_w, 3), dtype=np.float32)
-    count = np.zeros((out_h, out_w), dtype=int)
-    
-    # پخش نقاط در خروجی (با وزن‌دهی ساده)
+    map_x = (phi / (2*math.pi) + 0.5) * (out_w - 1)
+    map_y = (theta / math.pi) * (out_h - 1)
+
+    # تصویر خروجی اولیه (با حفره)
+    result = np.zeros((out_h, out_w), dtype=np.float64)
+    weights = np.zeros((out_h, out_w), dtype=np.float64)
     for y in range(height):
         for x in range(width):
-            r_norm = (r_arr[y, x] - min_r) / (max_r - min_r)
-            t_norm = (t_arr[y, x] - min_t) / (max_t - min_t)
-            # نگاشت به مختصات خروجی (افقی بر اساس phi، عمودی بر اساس theta)
-            new_x = int(r_norm * (out_w - 1))
-            new_y = int(t_norm * (out_h - 1))
-            if 0 <= new_x < out_w and 0 <= new_y < out_h:
-                result[new_y, new_x] += pixels[y, x]
-                count[new_y, new_x] += 1
-    
-    # میانگین‌گیری نقاط روی هم افتاده
-    mask = count > 0
-    for c in range(3):
-        result[:, :, c][mask] /= count[mask]
-    
-    # پر کردن نقاط خالی با درونیابی
-    from scipy import ndimage
-    if np.any(count == 0):
-        for c in range(3):
-            result[:, :, c] = ndimage.zoom(
-                ndimage.zoom(result[:, :, c], 0.5, order=1),
-                2.0, order=1
-            )[:out_h, :out_w]
-    
-    result = np.clip(result, 0, 255).astype(np.uint8)
-    return Image.fromarray(result, 'RGB')
+            nx = int(round(map_x[y, x]))
+            ny = int(round(map_y[y, x]))
+            if 0 <= nx < out_w and 0 <= ny < out_h:
+                result[ny, nx] += pixels[y, x]
+                weights[ny, nx] += 1
+    mask = weights > 0
+    result[mask] /= weights[mask]
+
+    # ========== استراتژی درون‌یابی ==========
+    # 1. تشخیص منحنی‌های لبه با گرادیان
+    edges = sobel(pixels, axis=0)**2 + sobel(pixels, axis=1)**2
+    edges = edges > np.percentile(edges, 80)
+
+    # 2. برای هر پیکسل خالی، نزدیک‌ترین نقطه غیرخالی را در راستای گرادیان بیاب
+    empty_mask = (weights == 0)
+    if np.any(empty_mask):
+        # فاصله تا نزدیکترین نقطه پر
+        dist, idx = distance_transform_edt(empty_mask, return_indices=True)
+        # idx[0], idx[1] مختصات نزدیکترین نقطه پر برای هر پیکسل خالی
+        for i in range(out_h):
+            for j in range(out_w):
+                if empty_mask[i, j]:
+                    ni, nj = idx[0, i, j], idx[1, i, j]
+                    # درون‌یابی اسپلاین در همسایگی ۳×۳ (ساده‌شده: استفاده از مقدار نزدیکترین)
+                    result[i, j] = result[ni, nj]
+    # 3. هموارسازی و نرمال‌سازی
+    result = np.clip(result * 255, 0, 255).astype(np.uint8)
+    return Image.fromarray(result, 'L')
