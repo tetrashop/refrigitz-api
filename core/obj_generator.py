@@ -1,51 +1,40 @@
 import numpy as np
 from PIL import Image
-from scipy.ndimage import sobel, gaussian_filter, zoom
-from scipy.spatial import KDTree
+from scipy.ndimage import gaussian_filter, zoom
 
-def generate_obj(img, upsample=2):
+def generate_obj(img, smooth_sigma=3.0, upsample=2):
     """
-    تولید مش سه‌بعدی با سطح هموار و طبیعی:
-    - عمق = ترکیب روشنایی + لبه (edge enhanced)
-    - افزایش رزولوشن مش با درون‌یابی (upsample)
+    تولید مش سه‌بعدی با سطح کاملاً هموار و طبیعی:
+    - عمق = روشنایی تصویر با هموارسازی قوی (حذف نویز و لبه‌های تیز)
+    - افزایش تراکم نقاط با درون‌یابی (upsample)
     - محاسبه نرمال‌های رأسی برای سایه‌زنی صاف
     """
     img = img.convert('RGB')
     width, height = img.size
-    max_res = 80  # وضوح پایه
-    if width > max_res or height > max_res:
-        ratio = min(max_res / width, max_res / height)
+    # رزولوشن پایه (قبل از upsample)
+    base_res = 60
+    if width > base_res or height > base_res:
+        ratio = min(base_res / width, base_res / height)
         width, height = int(width * ratio), int(height * ratio)
         img = img.resize((width, height), Image.LANCZOS)
 
     pixels = np.array(img, dtype=np.float32) / 255.0
 
-    # روشنایی
+    # محاسبه روشنایی (Luminance)
     gray = 0.299 * pixels[:,:,0] + 0.587 * pixels[:,:,1] + 0.114 * pixels[:,:,2]
 
-    # تشخیص لبه (Sobel)
-    edges_x = sobel(gray, axis=0)
-    edges_y = sobel(gray, axis=1)
-    edge_mag = np.sqrt(edges_x**2 + edges_y**2)
-    edge_mag /= (edge_mag.max() + 1e-9)
+    # هموارسازی قوی نقشهٔ عمق (حذف نوسانات تیز)
+    depth = gaussian_filter(gray, sigma=smooth_sigma)
 
-    # ترکیب عمق
-    depth = 0.7 * gray + 0.3 * edge_mag
+    # نرمال‌سازی مجدد به بازهٔ [0,1]
+    depth = (depth - depth.min()) / (depth.max() - depth.min() + 1e-9)
 
-    # فیلتر دوطرفه ساده (حفظ لبه، کاهش نویز)
-    # با دو بار هموارسازی گوسی ملایم و ترکیب با تصویر اصلی
-    depth_smooth = gaussian_filter(depth, sigma=0.8)
-    depth = depth * 0.6 + depth_smooth * 0.4  # نگه‌داشتن لبه‌ها
-
-    # افزایش وضوح (upsample) برای سطح هموارتر
+    # افزایش وضوح برای سطح صاف‌تر (درون‌یابی بیکوبیک)
     if upsample > 1:
         depth = zoom(depth, upsample, order=2)  # bicubic
-        # بزرگ‌کردن تصویر برای هماهنگی ابعاد
-        # ابعاد جدید
         new_h, new_w = depth.shape
         # بزرگ‌کردن تصویر اصلی برای رنگ‌ها
-        from PIL import Image as PILImage
-        img_big = img.resize((new_w, new_h), PILImage.BICUBIC)
+        img_big = img.resize((new_w, new_h), Image.BICUBIC)
         pixels = np.array(img_big, dtype=np.float32) / 255.0
         width, height = new_w, new_h
 
@@ -60,7 +49,7 @@ def generate_obj(img, upsample=2):
     xx, yy = np.meshgrid(x, y)
     zz = depth * scale_z
 
-    # رئوس
+    # رئوس و رنگ‌ها
     vertices = np.stack([xx, yy, zz], axis=-1).reshape(-1, 3)
     colors = pixels.reshape(-1, 3)
 
@@ -76,7 +65,7 @@ def generate_obj(img, upsample=2):
             faces.append((idx0, idx3, idx2))
     faces = np.array(faces)
 
-    # محاسبه نرمال‌های رأسی (میانگین‌گیری نرمال وجه‌های همسایه)
+    # محاسبه نرمال‌های رأسی (میانگین‌گیری از وجه‌های همسایه)
     normals_per_vertex = np.zeros_like(vertices)
     count = np.zeros(len(vertices), dtype=int)
     for tri in faces:
@@ -88,15 +77,14 @@ def generate_obj(img, upsample=2):
             count[idx] += 1
     mask = count > 0
     normals_per_vertex[mask] /= count[mask, np.newaxis]
-    normals_per_vertex[~mask] = np.array([0, 0, 1])  # fallback
+    normals_per_vertex[~mask] = np.array([0, 0, 1])
 
     # نوشتن OBJ با نرمال‌ها و رنگ‌ها
-    lines = ["# Refrigitz Olympic Smooth 3D Relief"]
+    lines = ["# Refrigitz Olympic Smooth Relief (No spikes)"]
     for v, c, n in zip(vertices, colors, normals_per_vertex):
         lines.append(f"v {v[0]:.4f} {v[1]:.4f} {v[2]:.4f} {c[0]:.4f} {c[1]:.4f} {c[2]:.4f}")
         lines.append(f"vn {n[0]:.4f} {n[1]:.4f} {n[2]:.4f}")
     for f in faces:
-        # OBJ format: f v1//vn1 v2//vn2 v3//vn3 (vertex & normal indices same)
         lines.append(f"f {f[0]+1}//{f[0]+1} {f[1]+1}//{f[1]+1} {f[2]+1}//{f[2]+1}")
 
     return "\n".join(lines).encode('utf-8')
