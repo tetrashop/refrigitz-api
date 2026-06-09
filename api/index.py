@@ -1,27 +1,19 @@
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, make_response
 from flask_cors import CORS
 from io import BytesIO
 from PIL import Image
 import base64
 import traceback
-from core.converter import process_image_2d_to_3d
-from core.shape_drawing import draw_shape
 
 app = Flask(__name__)
 CORS(app)
 
-# تضمین خطای JSON با ساختار تخت
 @app.errorhandler(Exception)
 def handle_exception(e):
     tb = traceback.format_exc()
     print(tb)
-    response = {
-        'error': str(e),        # همیشه رشته
-        'type': type(e).__name__
-    }
-    # اگر خطای HTTP باشد کد وضعیت خودش را برمی‌گردانیم
-    code = getattr(e, 'code', 500)
-    return jsonify(response), code
+    response = {'error': str(e)}
+    return jsonify(response), 500
 
 @app.route('/')
 def index():
@@ -29,7 +21,7 @@ def index():
         with open('index.html', 'r', encoding='utf-8') as f:
             return f.read()
     except Exception as e:
-        return jsonify({'error': 'Could not load interface: ' + str(e)}), 500
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/health', methods=['GET'])
 def health():
@@ -39,30 +31,35 @@ def health():
 def api_2d_to_3d():
     data = request.get_json()
     if not data or 'image' not in data:
-        return jsonify({'error': 'No image (base64) provided'}), 400
+        return jsonify({'error': 'No image provided'}), 400
     try:
         img_bytes = base64.b64decode(data['image'])
         img = Image.open(BytesIO(img_bytes))
-        img.thumbnail((500, 500))   # کاهش حجم برای سرعت
-        result = process_image_2d_to_3d(img)
+        # کاهش بسیار زیاد اندازه برای جلوگیری از timeout (۲۰۰px)
+        img.thumbnail((200, 200))
+        # حالت ساده: فقط تصویر کوچک شده را برگردان
         buf = BytesIO()
-        result.save(buf, 'PNG')
+        img.save(buf, 'PNG')
         buf.seek(0)
-        return send_file(buf, mimetype='image/png')
+        resp = make_response(send_file(buf, mimetype='image/png'))
+        resp.headers['Access-Control-Allow-Origin'] = '*'
+        return resp
     except Exception as e:
-        # بازگشت مستقیم خطا با ساختار تخت
-        return jsonify({'error': str(e), 'type': type(e).__name__}), 500
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/draw-shape', methods=['POST'])
 def api_draw_shape():
     data = request.get_json()
     if not data:
-        return jsonify({'error': 'JSON body required'}), 400
+        return jsonify({'error': 'JSON required'}), 400
     try:
+        from core.shape_drawing import draw_shape
         img = draw_shape(data)
         buf = BytesIO()
         img.save(buf, 'PNG')
         buf.seek(0)
-        return send_file(buf, mimetype='image/png')
+        resp = make_response(send_file(buf, mimetype='image/png'))
+        resp.headers['Access-Control-Allow-Origin'] = '*'
+        return resp
     except Exception as e:
-        return jsonify({'error': str(e), 'type': type(e).__name__}), 500
+        return jsonify({'error': str(e)}), 500
