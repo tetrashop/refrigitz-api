@@ -4,7 +4,10 @@ from scipy.ndimage import gaussian_filter, sobel, binary_erosion
 from scipy.interpolate import griddata, NearestNDInterpolator
 from sklearn.neighbors import NearestNeighbors
 
-def generate_obj(img, detail_strength=0.5, grid_res=80):
+def generate_obj(img, detail_strength=0.8, grid_res=80):
+    """
+    مدل سه‌بعدی که جزئیات (لبه‌ها) را برجسته و پس‌زمینه را صاف می‌کند.
+    """
     img = img.convert('RGB')
     width, height = img.size
     max_dim = 100
@@ -16,21 +19,30 @@ def generate_obj(img, detail_strength=0.5, grid_res=80):
     pixels = np.array(img, dtype=np.float32) / 255.0
     gray = 0.299 * pixels[:,:,0] + 0.587 * pixels[:,:,1] + 0.114 * pixels[:,:,2]
 
-    # 1. نقشهٔ عمق پایه (Unsharp Masking)
+    # ۱. محاسبهٔ جزئیات (تفاوت تصویر با Blur)
     blurred = gaussian_filter(gray, sigma=2.0)
     detail = gray - blurred
-    detail_smooth = gaussian_filter(detail, sigma=0.5)
-    depth_base = blurred + detail_smooth * detail_strength
-    depth_base = (depth_base - depth_base.min()) / (depth_base.max() - depth_base.min() + 1e-9)
 
-    # 2. تشخیص لبه‌ها
+    # ۲. عمق بر اساس اندازهٔ جزئیات (Absolute Detail)
+    #    نواحی با جزئیات زیاد (لبه‌ها) ارتفاع می‌گیرند، پس‌زمینهٔ صاف ارتفاع صفر
+    depth_base = np.abs(detail)
+
+    # ۳. هموارسازی ملایم عمق (برای جلوگیری از نویز)
+    depth_base = gaussian_filter(depth_base, sigma=0.8)
+
+    # ۴. نرمال‌سازی به [0,1] و افزودن حداقل ارتفاع
+    depth_base = (depth_base - depth_base.min()) / (depth_base.max() - depth_base.min() + 1e-9)
+    depth_base = np.clip(depth_base, 0.05, 1.0)  # جلوگیری از صفر مطلق
+
+    # ---- ادامهٔ کد مشابه نسخهٔ قبلی (Edge Fitting + Grid Sampling) ----
+
+    # تشخیص لبه‌ها برای برازش خط
     edges_x = sobel(gray, axis=0)
     edges_y = sobel(gray, axis=1)
     edge_mag = np.sqrt(edges_x**2 + edges_y**2)
     edge_binary = edge_mag > np.percentile(edge_mag, 80)
     edge_binary = binary_erosion(edge_binary, iterations=1)
 
-    # 3. نقاط لبه
     ys, xs = np.where(edge_binary)
     edge_points = []
     for x, y in zip(xs, ys):
@@ -41,7 +53,6 @@ def generate_obj(img, detail_strength=0.5, grid_res=80):
     if len(edge_points) < 10:
         return _simple_grid_mesh(img, depth_base, grid_res)
 
-    # 4. برازش خط و تولید نقاط جدید
     new_points = []
     stride = max(1, len(edge_points) // 200)
     neigh = NearestNeighbors(n_neighbors=10)
@@ -69,7 +80,6 @@ def generate_obj(img, detail_strength=0.5, grid_res=80):
     else:
         all_points = edge_points
 
-    # 5. نقشهٔ عمق جدید با griddata
     grid_x = np.linspace(0, width-1, grid_res)
     grid_y = np.linspace(0, height-1, grid_res)
     grid_xx, grid_yy = np.meshgrid(grid_x, grid_y)
@@ -81,18 +91,17 @@ def generate_obj(img, detail_strength=0.5, grid_res=80):
     if np.any(nan_mask):
         interp = NearestNDInterpolator(all_points[:, :2], all_points[:, 2])
         depth_grid[nan_mask] = interp(grid_xx[nan_mask], grid_yy[nan_mask])
-    depth_grid = np.clip(depth_grid, 0, 1)
+    depth_grid = np.clip(depth_grid, 0.05, 1.0)  # حداقل ارتفاع
 
-    # ** معکوس‌سازی برای برجستگی صحیح (نواحی روشن بالا می‌آیند) **
+    # ====== بدون معکوس‌سازی (جزئیات خود برجسته‌اند) ======
 
-    # 6. مش نهایی
     img_resized = img.resize((grid_res, grid_res), Image.LANCZOS)
     colors = np.array(img_resized, dtype=np.float32) / 255.0
 
     x = np.linspace(0, 100, grid_res)
     y = np.linspace(0, 100, grid_res)
     xx, yy = np.meshgrid(x, y)
-    zz = depth_grid * 40.0
+    zz = depth_grid * 40.0  # مقیاس عمق
 
     vertices = np.stack([xx, yy, zz], axis=-1).reshape(-1, 3)
 
@@ -107,7 +116,6 @@ def generate_obj(img, detail_strength=0.5, grid_res=80):
             faces.append((a, d, c))
     faces = np.array(faces)
 
-    # نرمال‌ها
     normals = np.zeros_like(vertices)
     cnt = np.zeros(len(vertices), dtype=int)
     for tri in faces:
@@ -121,7 +129,7 @@ def generate_obj(img, detail_strength=0.5, grid_res=80):
     normals[mask] /= cnt[mask, np.newaxis]
     normals[~mask] = np.array([0, 0, 1])
 
-    lines = ["# Refrigitz Corrected Relief (Light = High)"]
+    lines = ["# Refrigitz Detail-Only Relief (background flat)"]
     for v, c, n in zip(vertices, colors.reshape(-1, 3), normals):
         lines.append(f"v {v[0]:.4f} {v[1]:.4f} {v[2]:.4f} {c[0]:.4f} {c[1]:.4f} {c[2]:.4f}")
         lines.append(f"vn {n[0]:.4f} {n[1]:.4f} {n[2]:.4f}")
@@ -132,7 +140,8 @@ def generate_obj(img, detail_strength=0.5, grid_res=80):
 
 
 def _simple_grid_mesh(img, depth_map, grid_res):
-    # fallback
+    # fallback با همان منطق جزئیات (بدون معکوس‌سازی)
+    depth_map = np.clip(depth_map, 0.05, 1.0)
     width, height = img.size
     img_rs = img.resize((grid_res, grid_res), Image.LANCZOS)
     pixels = np.array(img_rs, dtype=np.float32) / 255.0
@@ -163,7 +172,7 @@ def _simple_grid_mesh(img, depth_map, grid_res):
     mask = cnt>0
     normals[mask] /= cnt[mask, np.newaxis]
     normals[~mask] = np.array([0,0,1])
-    lines = ["# Simple Inverted Mesh"]
+    lines = ["# Simple Detail Mesh"]
     for v,c,n in zip(vertices, pixels.reshape(-1,3), normals):
         lines.append(f"v {v[0]:.4f} {v[1]:.4f} {v[2]:.4f} {c[0]:.4f} {c[1]:.4f} {c[2]:.4f}")
         lines.append(f"vn {n[0]:.4f} {n[1]:.4f} {n[2]:.4f}")
