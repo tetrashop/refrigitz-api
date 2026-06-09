@@ -3,6 +3,7 @@ from flask_cors import CORS
 from io import BytesIO
 from PIL import Image
 import base64
+from core.obj_generator import generate_obj
 
 app = Flask(__name__)
 CORS(app)
@@ -24,17 +25,30 @@ def api_2d_to_3d():
     data = request.get_json()
     if not data or 'image' not in data:
         return jsonify({'error': 'No image provided'}), 400
+    fmt = request.args.get('format', 'png')  # پیش‌فرض png
     try:
         img_bytes = base64.b64decode(data['image'])
-        img = Image.open(BytesIO(img_bytes))
-        # فعلاً فقط تصویر را کوچک می‌کنیم و برمی‌گردانیم تا تابع پاسخ دهد
+        img = Image.open(BytesIO(img_bytes)).convert('RGB')
+        # کاهش اندازه برای سرعت
         img.thumbnail((200, 200))
-        buf = BytesIO()
-        img.save(buf, 'PNG')
-        buf.seek(0)
-        resp = make_response(send_file(buf, mimetype='image/png'))
-        resp.headers['Access-Control-Allow-Origin'] = '*'
-        return resp
+
+        if fmt == 'obj':
+            # تولید فایل OBJ سه‌بعدی
+            obj_data = generate_obj(img)
+            buf = BytesIO(obj_data)
+            resp = make_response(send_file(buf, mimetype='application/octet-stream',
+                                           as_attachment=True,
+                                           download_name='model.obj'))
+            resp.headers['Access-Control-Allow-Origin'] = '*'
+            return resp
+        else:
+            # برگرداندن تصویر سه‌بعدی‌شده (همان تصویر اصلی فعلاً)
+            buf = BytesIO()
+            img.save(buf, 'PNG')
+            buf.seek(0)
+            resp = make_response(send_file(buf, mimetype='image/png'))
+            resp.headers['Access-Control-Allow-Origin'] = '*'
+            return resp
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
