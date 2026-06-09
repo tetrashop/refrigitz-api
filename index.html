@@ -10,11 +10,10 @@
         .container { width: 100%; max-width: 560px; }
         .header { text-align: center; margin-bottom: 2.5rem; }
         .header h1 { font-size: 2.2rem; font-weight: 800; background: linear-gradient(to left, #38bdf8, #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-        .card { background: #1e293b; border-radius: 1.2rem; padding: 2rem; margin-bottom: 1.5rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); border: 1px solid #334155; transition: transform 0.2s; }
-        .card:hover { transform: translateY(-2px); }
+        .card { background: #1e293b; border-radius: 1.2rem; padding: 2rem; margin-bottom: 1.5rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); border: 1px solid #334155; }
         .card h2 { font-size: 1.4rem; margin-bottom: 1.5rem; color: #f1f5f9; display: flex; align-items: center; gap: 0.5rem; }
         .upload-area { border: 2px dashed #475569; border-radius: 1rem; padding: 2rem 1rem; text-align: center; cursor: pointer; transition: background 0.2s; margin-bottom: 1rem; }
-        .upload-area:hover, .upload-area.dragover { background: #0f172a; border-color: #38bdf8; }
+        .upload-area:hover { background: #0f172a; border-color: #38bdf8; }
         .upload-area img { width: 48px; margin-bottom: 0.5rem; opacity: 0.7; }
         .upload-area p { color: #94a3b8; font-size: 0.95rem; }
         input[type="file"] { display: none; }
@@ -26,6 +25,7 @@
         .input-group input, .input-group select { width: 100%; padding: 0.7rem 1rem; border-radius: 0.7rem; border: 1px solid #475569; background: #0f172a; color: #e2e8f0; font-size: 1rem; }
         .result-img { width: 100%; margin-top: 1rem; border-radius: 0.8rem; display: none; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
         .error-msg { color: #f87171; font-size: 0.9rem; margin-top: 0.5rem; display: none; background: #450a0a; padding: 0.6rem 1rem; border-radius: 0.5rem; }
+        .success-msg { color: #4ade80; font-size: 0.9rem; margin-top: 0.5rem; display: none; background: #14532d; padding: 0.6rem 1rem; border-radius: 0.5rem; }
         .footer { text-align: center; margin-top: 2rem; color: #64748b; font-size: 0.85rem; }
         @media (max-width: 480px) { .card { padding: 1.5rem; } .header h1 { font-size: 1.8rem; } }
     </style>
@@ -40,7 +40,7 @@
         <!-- کارت تبدیل ۲بعدی به ۳بعدی -->
         <div class="card">
             <h2>📷 تبدیل تصویر دوبعدی به سه‌بعدی</h2>
-            <div class="upload-area" id="upload3D" onclick="document.getElementById('imageUpload').click()">
+            <div class="upload-area" onclick="document.getElementById('imageUpload').click()">
                 <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 24 24' fill='%2394a3b8'%3E%3Cpath d='M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z'/%3E%3C/svg%3E" alt="آپلود">
                 <p>برای انتخاب تصویر کلیک کنید یا فایل را اینجا رها کنید</p>
             </div>
@@ -48,6 +48,7 @@
             <p id="fileName3D" style="color:#94a3b8;font-size:0.9rem;margin-bottom:1rem;display:none;"></p>
             <button class="btn" id="btn3D" onclick="convertTo3D()">✨ تبدیل به سه‌بعدی</button>
             <p class="error-msg" id="error3D"></p>
+            <p class="success-msg" id="success3D"></p>
             <img class="result-img" id="result3D" alt="نتیجه تبدیل سه‌بعدی">
         </div>
 
@@ -74,6 +75,7 @@
             </div>
             <button class="btn" id="btnShape" onclick="drawShape()">🎨 ترسیم</button>
             <p class="error-msg" id="errorShape"></p>
+            <p class="success-msg" id="successShape"></p>
             <img class="result-img" id="resultShape" alt="شکل ترسیم شده">
         </div>
 
@@ -97,18 +99,13 @@
             }
         });
 
-        // Drag & Drop
-        const uploadArea = document.getElementById('upload3D');
-        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-            uploadArea.addEventListener(eventName, e => {
-                e.preventDefault();
-                e.stopPropagation();
-            });
-        });
-        uploadArea.addEventListener('dragover', () => uploadArea.classList.add('dragover'));
-        uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+        // Drag & Drop (خلاصه)
+        const uploadArea = document.querySelector('.upload-area');
+        uploadArea.addEventListener('dragover', e => { e.preventDefault(); uploadArea.style.background = '#0f172a'; });
+        uploadArea.addEventListener('dragleave', e => { e.preventDefault(); uploadArea.style.background = ''; });
         uploadArea.addEventListener('drop', e => {
-            uploadArea.classList.remove('dragover');
+            e.preventDefault();
+            uploadArea.style.background = '';
             const file = e.dataTransfer.files[0];
             if (file) {
                 const dt = new DataTransfer();
@@ -133,7 +130,7 @@
                     errorMessage = data.error || data.message || JSON.stringify(data);
                 } else {
                     const text = await response.text();
-                    errorMessage = text.substring(0, 200); // بخش اول پاسخ
+                    errorMessage = text.substring(0, 200);
                 }
             } catch {
                 errorMessage = 'پاسخ سرور قابل پردازش نیست';
@@ -145,8 +142,10 @@
         function convertTo3D() {
             const btn = document.getElementById('btn3D');
             const errorEl = document.getElementById('error3D');
+            const successEl = document.getElementById('success3D');
             const resultImg = document.getElementById('result3D');
             errorEl.style.display = 'none';
+            successEl.style.display = 'none';
             resultImg.style.display = 'none';
             btn.dataset.original = btn.textContent;
             setLoading(btn, true);
@@ -170,7 +169,8 @@
                 .then(async res => {
                     if (!res.ok) {
                         await handleApiError(res, errorEl);
-                        return;
+                        setLoading(btn, false);
+                        return null;
                     }
                     return res.blob();
                 })
@@ -178,6 +178,8 @@
                     if (blob) {
                         resultImg.src = URL.createObjectURL(blob);
                         resultImg.style.display = 'block';
+                        successEl.textContent = '✅ تصویر با موفقیت تبدیل شد.';
+                        successEl.style.display = 'block';
                     }
                 })
                 .catch(err => {
@@ -192,8 +194,10 @@
         function drawShape() {
             const btn = document.getElementById('btnShape');
             const errorEl = document.getElementById('errorShape');
+            const successEl = document.getElementById('successShape');
             const resultImg = document.getElementById('resultShape');
             errorEl.style.display = 'none';
+            successEl.style.display = 'none';
             resultImg.style.display = 'none';
             btn.dataset.original = btn.textContent;
             setLoading(btn, true);
@@ -225,7 +229,8 @@
             .then(async res => {
                 if (!res.ok) {
                     await handleApiError(res, errorEl);
-                    return;
+                    setLoading(btn, false);
+                    return null;
                 }
                 return res.blob();
             })
@@ -233,6 +238,8 @@
                 if (blob) {
                     resultImg.src = URL.createObjectURL(blob);
                     resultImg.style.display = 'block';
+                    successEl.textContent = '✅ شکل با موفقیت ترسیم شد.';
+                    successEl.style.display = 'block';
                 }
             })
             .catch(err => {
