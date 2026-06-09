@@ -27,12 +27,12 @@ def api_2d_to_3d():
     if not data or 'image' not in data:
         return jsonify({'error': 'No image provided'}), 400
     fmt = request.args.get('format', 'png')
+    invert = request.args.get('invert', 'false').lower() == 'true'
     try:
         img_bytes = base64.b64decode(data['image'])
         img = Image.open(BytesIO(img_bytes)).convert('RGB')
-        
         if fmt == 'obj':
-            obj_data = generate_obj(img)
+            obj_data = generate_obj(img, invert=invert)
             buf = BytesIO(obj_data)
             resp = make_response(send_file(buf, mimetype='application/octet-stream',
                                            as_attachment=True, download_name='model.obj'))
@@ -42,7 +42,6 @@ def api_2d_to_3d():
             result_img.save(buf, 'PNG')
             buf.seek(0)
             resp = make_response(send_file(buf, mimetype='image/png'))
-        
         resp.headers['Access-Control-Allow-Origin'] = '*'
         return resp
     except Exception as e:
@@ -64,6 +63,3 @@ def api_draw_shape():
         return resp
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-
-if __name__ == '__main__':
-    app.run()

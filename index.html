@@ -17,11 +17,9 @@
         .upload-area img { width: 48px; margin-bottom: 0.5rem; opacity: 0.7; }
         .upload-area p { color: #94a3b8; font-size: 0.95rem; }
         input[type="file"] { display: none; }
-        .btn { padding: 0.75rem 1.8rem; border: none; border-radius: 0.8rem; font-size: 1rem; font-weight: 600; cursor: pointer; width: 100%; margin-top: 0.5rem; text-align: center; display: inline-block; }
-        .btn-primary { background: #2563eb; color: white; }
-        .btn-success { background: #059669; color: white; }
-        .btn-download { background: #7c3aed; color: white; }
+        .btn { padding: 0.75rem 1.8rem; border: none; border-radius: 0.8rem; font-size: 1rem; font-weight: 600; cursor: pointer; background: #2563eb; color: white; width: 100%; margin-top: 0.5rem; text-align: center; }
         .btn:disabled { opacity: 0.5; pointer-events: none; }
+        .btn-download { background: #7c3aed; display: none; }
         .input-group { margin-bottom: 1rem; }
         .input-group label { display: block; font-size: 0.9rem; margin-bottom: 0.3rem; color: #94a3b8; }
         .input-group input, .input-group select { width: 100%; padding: 0.7rem 1rem; border-radius: 0.7rem; border: 1px solid #475569; background: #0f172a; color: #e2e8f0; font-size: 1rem; }
@@ -29,8 +27,8 @@
         .error-msg { color: #f87171; font-size: 0.9rem; margin-top: 0.5rem; display: none; background: #450a0a; padding: 0.6rem; border-radius: 0.5rem; }
         .success-msg { color: #4ade80; font-size: 0.9rem; margin-top: 0.5rem; display: none; background: #14532d; padding: 0.6rem; border-radius: 0.5rem; }
         .footer { text-align: center; margin-top: 2rem; color: #64748b; font-size: 0.85rem; }
-        .download-group { display: flex; gap: 0.5rem; margin-top: 1rem; }
-        .download-group a { flex: 1; text-decoration: none; }
+        .checkbox-group { display: flex; align-items: center; gap: 0.5rem; margin: 0.5rem 0; color: #94a3b8; }
+        .checkbox-group input { width: auto; }
     </style>
 </head>
 <body>
@@ -48,17 +46,18 @@
             </div>
             <input type="file" id="imageUpload" accept="image/*">
             <p id="fileName3D" style="color:#94a3b8;font-size:0.9rem;margin-bottom:1rem;display:none;"></p>
-            <button class="btn btn-primary" id="btn3D" onclick="convertTo3D('png')">✨ تبدیل به تصویر سه‌بعدی</button>
-            <button class="btn btn-download" id="btnObj" onclick="convertTo3D('obj')">🧊 دانلود مدل سه‌بعدی (OBJ)</button>
+            <div class="checkbox-group">
+                <input type="checkbox" id="invertCheck">
+                <label for="invertCheck">معکوس‌سازی عمق (invert)</label>
+            </div>
+            <button class="btn" id="btn3D" onclick="convertTo3D('png')">✨ تبدیل به تصویر سه‌بعدی</button>
+            <button class="btn" id="btnObj" onclick="convertTo3D('obj')">🧊 دانلود مدل سه‌بعدی (OBJ)</button>
+            <a class="btn btn-download" id="downloadOBJ" style="display:none;" download="model.obj">⬇️ ذخیره مدل</a>
             <p class="error-msg" id="error3D"></p>
             <p class="success-msg" id="success3D"></p>
-            <div class="download-group" id="downloadGroup" style="display:none;">
-                <a class="btn btn-success" id="downloadPNG" style="display:none;" download="refrigitz-3d.png">⬇️ تصویر</a>
-                <a class="btn btn-download" id="downloadOBJ" style="display:none;" download="model.obj">⬇️ مدل OBJ</a>
-            </div>
             <img class="result-img" id="result3D" alt="نتیجه">
         </div>
-        <!-- کارت ترسیم شکل -->
+        <!-- کارت ترسیم شکل (بدون تغییر) -->
         <div class="card">
             <h2>✏️ ترسیم شکل دوبعدی</h2>
             <div class="input-group">
@@ -79,7 +78,7 @@
                 <label>پارامترها (با کاما)</label>
                 <input type="text" id="paramsInput" value="50,50,200,150">
             </div>
-            <button class="btn btn-primary" id="btnShape" onclick="drawShape()">🎨 ترسیم</button>
+            <button class="btn" id="btnShape" onclick="drawShape()">🎨 ترسیم</button>
             <p class="error-msg" id="errorShape"></p>
             <p class="success-msg" id="successShape"></p>
             <img class="result-img" id="resultShape" alt="شکل">
@@ -88,7 +87,6 @@
     </div>
     <script>
         const BASE = window.location.origin;
-        // ذخیره آخرین base64 برای دانلود مجدد
         let lastBase64 = null;
 
         document.getElementById('imageUpload').addEventListener('change', function(e) {
@@ -97,7 +95,6 @@
             if (f) {
                 l.textContent = '📎 ' + f.name;
                 l.style.display = 'block';
-                // ذخیره base64 تصویر
                 const reader = new FileReader();
                 reader.onload = function(ev) {
                     lastBase64 = ev.target.result.split(',')[1];
@@ -121,18 +118,14 @@
             } catch { return 'Unknown error'; }
         }
 
-        // تابع اصلی تبدیل با قابلیت دریافت فرمت
         async function convertTo3D(format) {
             const btn = format === 'obj' ? document.getElementById('btnObj') : document.getElementById('btn3D');
             const errEl = document.getElementById('error3D');
             const succEl = document.getElementById('success3D');
             const img = document.getElementById('result3D');
-            const pngLink = document.getElementById('downloadPNG');
-            const objLink = document.getElementById('downloadOBJ');
-            const group = document.getElementById('downloadGroup');
-
+            const downloadLink = document.getElementById('downloadOBJ');
             errEl.style.display = 'none'; succEl.style.display = 'none'; img.style.display = 'none';
-            group.style.display = 'none';
+            downloadLink.style.display = 'none';
             btn.dataset.original = btn.textContent; setLoading(btn, true);
 
             if (!lastBase64) {
@@ -142,38 +135,27 @@
                 return;
             }
 
+            const invert = document.getElementById('invertCheck').checked;
+            const url = BASE + '/api/2d-to-3d?format=' + format + '&invert=' + invert;
+
             try {
-                const url = BASE + '/api/2d-to-3d?format=' + format;
                 const res = await fetch(url, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({image: lastBase64})
                 });
                 if (!res.ok) throw new Error(await extractError(res));
-
                 if (format === 'png') {
                     const blob = await res.blob();
-                    const urlBlob = URL.createObjectURL(blob);
-                    img.src = urlBlob;
+                    img.src = URL.createObjectURL(blob);
                     img.style.display = 'block';
-                    pngLink.href = urlBlob;
-                    pngLink.style.display = 'inline-block';
-                    // obj link را هم با ارسال مجدد بعداً پر می‌کنیم (اینجا می‌توانیم از همان lastBase64 استفاده کنیم)
-                    objLink.style.display = 'none'; // بعداً با کلیک دانلود OBJ دوباره fetch می‌شود
-                    group.style.display = 'flex';
                     succEl.textContent = '✅ تصویر سه‌بعدی آماده شد.';
                     succEl.style.display = 'block';
-                } else if (format === 'obj') {
+                } else {
                     const blob = await res.blob();
-                    const urlBlob = URL.createObjectURL(blob);
-                    // فعال‌سازی لینک دانلود OBJ
-                    objLink.href = urlBlob;
-                    objLink.download = 'model.obj';
-                    objLink.style.display = 'inline-block';
-                    // مخفی کردن لینک PNG (می‌توان بعداً با دکمه دیگر گرفت)
-                    pngLink.style.display = 'none';
-                    group.style.display = 'flex';
-                    succEl.textContent = '✅ مدل سه‌بعدی OBJ آماده دانلود است.';
+                    downloadLink.href = URL.createObjectURL(blob);
+                    downloadLink.style.display = 'block';
+                    succEl.textContent = '✅ مدل OBJ آماده دانلود است.';
                     succEl.style.display = 'block';
                 }
             } catch (ex) {
