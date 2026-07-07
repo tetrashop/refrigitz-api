@@ -1,14 +1,26 @@
 import numpy as np
 from PIL import Image
-from scipy.ndimage import sobel, zoom
 from scipy.spatial import Delaunay
 from skimage.restoration import denoise_bilateral
 
-def generate_obj(img_pil, invert=False, alpha=0.85, height_scale=40.0, grid_res=80, base_grid=150):
+def frankot_chellappa(dzdx, dzdy):
+    """بازسازی سطح از گرادیان‌ها (Frankot‑Chellappa)"""
+    h, w = dzdx.shape
+    wx = 2 * np.pi * np.fft.fftfreq(w)
+    wy = 2 * np.pi * np.fft.fftfreq(h)
+    WX, WY = np.meshgrid(wx, wy)
+    WX[0, 0] = 1e-9
+    WY[0, 0] = 1e-9
+    Zx = np.fft.fft2(dzdx)
+    Zy = np.fft.fft2(dzdy)
+    Z = (-1j * (WX * Zx + WY * Zy)) / (WX**2 + WY**2 + 1e-12)
+    return np.real(np.fft.ifft2(Z))
+
+def generate_obj(img_pil, invert=False, height_scale=40.0, grid_res=80, base_grid=150):
     """
-    مدل سه‌بعدی با قابلیت تنظیم ارتفاع (height_scale):
-    - height_scale = 0 → مدل کاملاً مسطح (بدون ارتفاع)
-    - height_scale > 0 → ارتفاع بر اساس ترکیب لبه و روشنایی
+    مدل سه‌بعدی با سطوح مثلثی واقعی (Faceted Mesh)
+    - از Shape-from-Shading (Frankot‑Chellappa) برای بازسازی سطح استفاده می‌شود
+    - هر مثلث یک صفحهٔ مورب مستقل است، نه فقط جابجایی قائم
     """
     img_rgb = img_pil.convert('RGB')
     img_gray = img_rgb.convert('L')
@@ -22,29 +34,24 @@ def generate_obj(img_pil, invert=False, alpha=0.85, height_scale=40.0, grid_res=
 
     gray = np.array(img_gray, dtype=np.float32) / 255.0
 
-    # ۱. محاسبه عمق پایه
-    edges_x = sobel(gray, axis=0)
-    edges_y = sobel(gray, axis=1)
-    edge_mag = np.sqrt(edges_x**2 + edges_y**2)
-    edge_mag = (edge_mag - edge_mag.min()) / (edge_mag.max() - edge_mag.min() + 1e-9)
-    depth_map = alpha * edge_mag + (1 - alpha) * gray
+    # ۱. پیش‌پردازش و محاسبه گرادیان‌ها
+    gray_smooth = denoise_bilateral(gray, sigma_color=0.1, sigma_spatial=2, channel_axis=None)
+    dzdx, dzdy = np.gradient(gray_smooth)
 
-    # ۲. فیلتر دوطرفه
-    depth_map = denoise_bilateral(depth_map, sigma_color=0.1, sigma_spatial=2, channel_axis=None)
+    # ۲. بازسازی سطح
+    depth_map = frankot_chellappa(dzdx, dzdy)
     depth_map = (depth_map - depth_map.min()) / (depth_map.max() - depth_map.min() + 1e-9)
-
     if invert:
         depth_map = 1.0 - depth_map
 
-    # ۳. نمونه‌برداری تطبیقی (همانند قبل)
+    # ۳. نمونه‌برداری تطبیقی (تراکم بر اساس انحنای سطح)
     xx_base, yy_base = np.meshgrid(
         np.linspace(0, width-1, base_grid),
         np.linspace(0, height-1, base_grid)
     )
     from scipy.ndimage import map_coordinates
-    weight_on_base = map_coordinates(depth_map, [yy_base, xx_base], order=1, mode='nearest')
-    probs = weight_on_base.flatten() + 0.1
-    probs /= probs.sum()
+    weight_on_base = np.abs(map_coordinates(depth_map, [yy_base, xx_base], order=1, mode='nearest')) + 0.1
+    probs = weight_on_base.flatten() / weight_on_base.sum()
 
     chosen_indices = np.random.choice(base_grid * base_grid, size=grid_res * grid_res, replace=False, p=probs)
     chosen_y = yy_base.flatten()[chosen_indices]
@@ -53,14 +60,9 @@ def generate_obj(img_pil, invert=False, alpha=0.85, height_scale=40.0, grid_res=
     points_2d = np.column_stack([chosen_x, chosen_y])
     tri = Delaunay(points_2d)
 
-    # ۴. تعیین عمق نهایی با توجه به height_scale
-    if height_scale == 0.0:
-        zz = np.zeros(len(chosen_x))
-    else:
-        zz = depth_map[(np.clip(chosen_y.astype(int), 0, height-1),
-                        np.clip(chosen_x.astype(int), 0, width-1))] * height_scale
-        if invert:
-            zz = height_scale - zz
+    # ۴. عمق نهایی
+    zz = depth_map[(np.clip(chosen_y.astype(int), 0, height-1),
+                    np.clip(chosen_x.astype(int), 0, width-1))] * height_scale
 
     # ۵. رنگ‌ها
     img_resized = img_rgb.resize((base_grid, base_grid), Image.LANCZOS)
@@ -87,7 +89,7 @@ def generate_obj(img_pil, invert=False, alpha=0.85, height_scale=40.0, grid_res=
     normals[~mask] = np.array([0, 0, 1])
 
     # ۸. نوشتن OBJ
-    lines = ["# Refrigitz Olympic Mesh (flat or relief)"]
+    lines = ["# Refrigitz Olympic Faceted Mesh (Surface from Normals)"]
     for v, c, n in zip(vertices, colors, normals):
         lines.append(f"v {v[0]:.4f} {v[1]:.4f} {v[2]:.4f} {c[0]:.4f} {c[1]:.4f} {c[2]:.4f}")
         lines.append(f"vn {n[0]:.4f} {n[1]:.4f} {n[2]:.4f}")
