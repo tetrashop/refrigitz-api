@@ -2,12 +2,18 @@ from flask import Flask, request, jsonify, send_file, make_response
 from flask_cors import CORS
 from io import BytesIO
 from PIL import Image
-import base64
+import base64, traceback
 from core.converter import process_image_2d_to_3d
 from core.obj_generator import generate_obj
 
 app = Flask(__name__)
 CORS(app)
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    tb = traceback.format_exc()
+    print(tb)
+    return jsonify({'error': str(e)}), 500
 
 @app.route('/')
 def index():
@@ -29,12 +35,12 @@ def api_2d_to_3d():
     fmt = request.args.get('format', 'png')
     invert = request.args.get('invert', 'false').lower() == 'true'
     alpha = float(request.args.get('alpha', 0.85))
-    height = float(request.args.get('height', 40.0))  # پیش‌فرض ۴۰ (ارتفاع معمولی)، صفر = صفحه تخت
+    height = float(request.args.get('height', 40.0))
     try:
         img_bytes = base64.b64decode(data['image'])
         img = Image.open(BytesIO(img_bytes)).convert('RGB')
         if fmt == 'obj':
-            obj_data = generate_obj(img, invert=invert, alpha=alpha, height_scale=height)
+            obj_data = generate_obj(img, invert=invert, height_scale=height)
             buf = BytesIO(obj_data)
             resp = make_response(send_file(buf, mimetype='application/octet-stream',
                                            as_attachment=True, download_name='model.obj'))
