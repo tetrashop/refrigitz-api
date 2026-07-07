@@ -29,11 +29,12 @@ def api_2d_to_3d():
     fmt = request.args.get('format', 'png')
     invert = request.args.get('invert', 'false').lower() == 'true'
     alpha = float(request.args.get('alpha', 0.85))
+    height = float(request.args.get('height', 40.0))  # پیش‌فرض ۴۰ (ارتفاع معمولی)، صفر = صفحه تخت
     try:
         img_bytes = base64.b64decode(data['image'])
         img = Image.open(BytesIO(img_bytes)).convert('RGB')
         if fmt == 'obj':
-            obj_data = generate_obj(img, invert=invert, alpha=alpha)
+            obj_data = generate_obj(img, invert=invert, alpha=alpha, height_scale=height)
             buf = BytesIO(obj_data)
             resp = make_response(send_file(buf, mimetype='application/octet-stream',
                                            as_attachment=True, download_name='model.obj'))

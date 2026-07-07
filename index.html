@@ -36,6 +36,11 @@
                     <label><input type="checkbox" id="invertCheck"> معکوس عمق</label>
                 </div>
                 <div class="toolbar">
+                    <label>ارتفاع (0=تخت):</label>
+                    <input type="range" id="heightSlider" min="0" max="80" value="40" step="1">
+                    <span id="heightValue">40</span>
+                </div>
+                <div class="toolbar">
                     <label>تعادل لبه/روشنایی (α):</label>
                     <input type="range" id="alphaSlider" min="0" max="1" step="0.05" value="0.85">
                     <span id="alphaValue">0.85</span>
@@ -199,6 +204,10 @@
             reader.readAsDataURL(file);
         });
 
+        const heightSlider = document.getElementById('heightSlider');
+        const heightValue = document.getElementById('heightValue');
+        heightSlider.addEventListener('input', () => { heightValue.textContent = heightSlider.value; });
+
         const alphaSlider = document.getElementById('alphaSlider');
         const alphaValue = document.getElementById('alphaValue');
         alphaSlider.addEventListener('input', () => { alphaValue.textContent = alphaSlider.value; });
@@ -206,8 +215,9 @@
         async function convertTo3D(format) {
             if (!lastBase64) { alert('لطفاً یک تصویر انتخاب کنید.'); return; }
             const invert = document.getElementById('invertCheck').checked;
+            const height = heightSlider.value;
             const alpha = alphaSlider.value;
-            const url = `${BASE}/api/2d-to-3d?format=${format}&invert=${invert}&alpha=${alpha}`;
+            const url = `${BASE}/api/2d-to-3d?format=${format}&invert=${invert}&height=${height}&alpha=${alpha}`;
             try {
                 const res = await fetch(url, {
                     method: 'POST',
