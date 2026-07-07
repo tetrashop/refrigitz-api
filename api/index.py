@@ -28,11 +28,12 @@ def api_2d_to_3d():
         return jsonify({'error': 'No image provided'}), 400
     fmt = request.args.get('format', 'png')
     invert = request.args.get('invert', 'false').lower() == 'true'
+    alpha = float(request.args.get('alpha', 0.85))
     try:
         img_bytes = base64.b64decode(data['image'])
         img = Image.open(BytesIO(img_bytes)).convert('RGB')
         if fmt == 'obj':
-            obj_data = generate_obj(img, invert=invert)
+            obj_data = generate_obj(img, invert=invert, alpha=alpha)
             buf = BytesIO(obj_data)
             resp = make_response(send_file(buf, mimetype='application/octet-stream',
                                            as_attachment=True, download_name='model.obj'))
