@@ -14,10 +14,21 @@ android {
         versionName "1.0"
     }
 
+    signingConfigs {
+        release {
+            // مسیر فایل Keystore که در Workflow ساخته می‌شود
+            storeFile rootProject.file("refrigitz-keystore.jks")
+            storePassword System.getenv("KEYSTORE_PASSWORD") ?: "changeit"
+            keyAlias System.getenv("KEY_ALIAS") ?: "refrigitz"
+            keyPassword System.getenv("KEY_PASSWORD") ?: "changeit"
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
         }
     }
     compileOptions {
@@ -32,7 +43,4 @@ android {
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'androidx.webkit:webkit:1.7.0'
-    implementation 'org.jetbrains.kotlin:kotlin-stdlib:1.9.0'
-    implementation 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.0'
-    implementation 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.0'
 }

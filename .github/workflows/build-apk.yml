@@ -1,4 +1,4 @@
-name: Build Android APK on Tag
+name: Build Signed APK on Tag
 
 on:
   push:
@@ -21,23 +21,38 @@ jobs:
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v4
 
+    - name: Generate Keystore
+      working-directory: android
+      run: |
+        keytool -genkey -v \
+          -keystore refrigitz-keystore.jks \
+          -keyalg RSA -keysize 2048 -validity 10000 \
+          -alias refrigitz \
+          -storepass "changeit" \
+          -keypass "changeit" \
+          -dname "CN=Refrigitz, OU=Dev, O=Refrigitz, L=City, ST=State, C=US"
+
     - name: Generate Gradle Wrapper
       working-directory: android
       run: gradle wrapper --gradle-version 8.7
 
-    - name: Build APK
+    - name: Build Signed APK
       working-directory: android
+      env:
+        KEYSTORE_PASSWORD: changeit
+        KEY_ALIAS: refrigitz
+        KEY_PASSWORD: changeit
       run: ./gradlew assembleRelease
 
-    - name: Upload APK to Release
+    - name: Upload Signed APK to Release
       uses: softprops/action-gh-release@v2
       with:
-        files: android/app/build/outputs/apk/release/app-release-unsigned.apk
+        files: android/app/build/outputs/apk/release/app-release.apk
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Upload APK as Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: refrigitz-apk
-        path: android/app/build/outputs/apk/release/app-release-unsigned.apk
+        name: refrigitz-signed-apk
+        path: android/app/build/outputs/apk/release/app-release.apk
