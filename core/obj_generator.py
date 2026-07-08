@@ -2,55 +2,56 @@ import numpy as np
 from PIL import Image
 from scipy.ndimage import gaussian_filter
 
-def generate_obj(img_pil, invert=False, height_scale=40.0, grid_res=80):
+def generate_obj(img_pil, invert=False, height_scale=40.0, grid_res=100):
     """
-    مدل سه‌بعدی توخالی با سطح کاملاً صاف و رنگ‌آمیزی واقعی.
-    - از شبکهٔ منظم (Uniform Grid) برای حذف مثلث‌های تیز استفاده می‌کند.
-    - عمق = روشنایی با Unsharp Masking ملایم + هموارسازی قوی.
-    - دیواره‌های جانبی حجم را می‌بندند.
+    مدل سه‌بعدی توخالی با پوستهٔ هوشمند (ضخامت متغیر) و لبه‌های منحنی.
+    - سطح جلو: بر اساس روشنایی با هموارسازی قوی.
+    - سطح پشت: جابجایی معکوس با ضخامت متناسب با ارتفاع (نواحی برجسته ضخیم‌تر).
+    - دیواره‌های جانبی: انحنای سطح را در لبه‌ها دنبال می‌کنند.
     """
     img_rgb = img_pil.convert('RGB')
     img_gray = img_rgb.convert('L')
     width, height = img_gray.size
     
-    # ۱. محدودیت ابعاد و تغییر اندازه به grid_res (پردازش مستقیم)
-    max_dim = grid_res
-    if width > max_dim or height > max_dim:
-        ratio = max_dim / max(width, height)
-        width, height = int(width * ratio), int(height * ratio)
-    img_gray = img_gray.resize((width, height), Image.LANCZOS)
-    img_rgb = img_rgb.resize((width, height), Image.LANCZOS)
+    # ۱. تغییر اندازه به grid_res (پردازش مستقیم)
+    img_gray = img_gray.resize((grid_res, grid_res), Image.LANCZOS)
+    img_rgb = img_rgb.resize((grid_res, grid_res), Image.LANCZOS)
+    width = height = grid_res
 
     gray = np.array(img_gray, dtype=np.float32) / 255.0
 
-    # ۲. محاسبهٔ عمق صاف و طبیعی
-    blurred = gaussian_filter(gray, sigma=4.0)          # پایهٔ کاملاً صاف
+    # ۲. محاسبهٔ عمق صاف و طبیعی (Unsharp Masking قوی)
+    blurred = gaussian_filter(gray, sigma=5.0)          # پایهٔ بسیار صاف
     detail = gray - blurred                             # جزئیات ریز
-    detail_smooth = gaussian_filter(detail, sigma=1.0)  # حذف نویز جزئیات
-    depth = blurred + detail_smooth * 0.2               # فقط ۲۰٪ جزئیات برای شباهت
+    detail_smooth = gaussian_filter(detail, sigma=1.5)  # حذف نویز جزئیات
+    depth = blurred + detail_smooth * 0.15              # فقط ۱۵٪ جزئیات برای شباهت
     depth = (depth - depth.min()) / (depth.max() - depth.min() + 1e-9)
 
     if invert:
         depth = 1.0 - depth
 
-    # ۳. ساخت شبکهٔ منظم از رئوس
+    # ۳. ساخت شبکهٔ منظم از رئوس (X, Y, Z)
     x = np.linspace(0, 100, width)
     y = np.linspace(0, 100, height)
     xx, yy = np.meshgrid(x, y)
-    zz = depth * height_scale
+    z_front = depth * height_scale
 
-    # رئوس جلو و پشت
-    vertices_front = np.stack([xx, yy, zz], axis=-1).reshape(-1, 3)
-    shell_thickness = height_scale * 0.08
-    vertices_back = np.stack([xx, yy, zz - shell_thickness], axis=-1).reshape(-1, 3)
+    # ضخامت هوشمند: متناسب با ارتفاع (حداقل ۵٪ ارتفاع برای جلوگیری از صفر شدن)
+    max_thickness = height_scale * 0.12
+    thickness = depth * max_thickness + 0.02 * height_scale
+    z_back = z_front - thickness
+
+    # ۴. ترکیب رئوس جلو و پشت
+    vertices_front = np.stack([xx, yy, z_front], axis=-1).reshape(-1, 3)
+    vertices_back  = np.stack([xx, yy, z_back], axis=-1).reshape(-1, 3)
     all_vertices = np.vstack([vertices_front, vertices_back])
 
-    # رنگ‌ها (مستقیماً از تصویر اصلی)
+    # ۵. رنگ‌ها (مستقیماً از تصویر اصلی)
     colors = np.array(img_rgb, dtype=np.float32) / 255.0
     colors_flat = colors.reshape(-1, 3)
     all_colors = np.vstack([colors_flat, colors_flat])
 
-    # ۴. مثلث‌های جلو و پشت (شبکهٔ منظم)
+    # ۶. مثلث‌های جلو و پشت (شبکهٔ منظم)
     faces_front = []
     for i in range(height - 1):
         for j in range(width - 1):
@@ -65,9 +66,9 @@ def generate_obj(img_pil, invert=False, height_scale=40.0, grid_res=80):
     offset = len(vertices_front)
     faces_back = faces_front[:, ::-1] + offset  # معکوس برای نرمال بیرون
 
-    # ۵. دیواره‌های جانبی (نوارهای مثلثی)
+    # ۷. دیواره‌های جانبی منحنی (با نمونه‌برداری از عمق)
     side_faces = []
-    # دیوارهٔ بالا (y = 0)
+    # دیوارهٔ بالا (y = 0) → ردیف اول
     for j in range(width - 1):
         a = j
         b = j + 1
@@ -75,7 +76,7 @@ def generate_obj(img_pil, invert=False, height_scale=40.0, grid_res=80):
         d = j + 1 + offset
         side_faces.append([a, b, d])
         side_faces.append([a, d, c])
-    # دیوارهٔ پایین (y = height-1)
+    # دیوارهٔ پایین (y = height-1) → ردیف آخر
     base = (height - 1) * width
     for j in range(width - 1):
         a = base + j
@@ -84,7 +85,7 @@ def generate_obj(img_pil, invert=False, height_scale=40.0, grid_res=80):
         d = base + j + 1 + offset
         side_faces.append([a, b, d])
         side_faces.append([a, d, c])
-    # دیوارهٔ چپ (x = 0)
+    # دیوارهٔ چپ (x = 0) → ستون اول
     for i in range(height - 1):
         a = i * width
         b = (i + 1) * width
@@ -92,7 +93,7 @@ def generate_obj(img_pil, invert=False, height_scale=40.0, grid_res=80):
         d = (i + 1) * width + offset
         side_faces.append([a, b, d])
         side_faces.append([a, d, c])
-    # دیوارهٔ راست (x = width-1)
+    # دیوارهٔ راست (x = width-1) → ستون آخر
     for i in range(height - 1):
         a = i * width + (width - 1)
         b = (i + 1) * width + (width - 1)
@@ -104,7 +105,7 @@ def generate_obj(img_pil, invert=False, height_scale=40.0, grid_res=80):
 
     all_faces = np.vstack([faces_front, faces_back, side_faces])
 
-    # ۶. محاسبهٔ نرمال‌های رأسی (میانگین‌گیری از همهٔ وجه‌های متصل)
+    # ۸. محاسبهٔ نرمال‌های رأسی (میانگین‌گیری از همهٔ وجه‌های متصل)
     normals = np.zeros_like(all_vertices)
     for tri in all_faces:
         v0, v1, v2 = all_vertices[tri[0]], all_vertices[tri[1]], all_vertices[tri[2]]
@@ -116,8 +117,8 @@ def generate_obj(img_pil, invert=False, height_scale=40.0, grid_res=80):
     normals[mask] /= np.linalg.norm(normals[mask], axis=1, keepdims=True)
     normals[~mask] = np.array([0, 0, 1])
 
-    # ۷. نوشتن فایل OBJ
-    lines = ["# Refrigitz Olympic Smooth Hollow Shell"]
+    # ۹. نوشتن فایل OBJ
+    lines = ["# Refrigitz Olympic Hollow Shell with Smart Thickness"]
     for v, c, n in zip(all_vertices, all_colors, normals):
         lines.append(f"v {v[0]:.4f} {v[1]:.4f} {v[2]:.4f} {c[0]:.4f} {c[1]:.4f} {c[2]:.4f}")
         lines.append(f"vn {n[0]:.4f} {n[1]:.4f} {n[2]:.4f}")
