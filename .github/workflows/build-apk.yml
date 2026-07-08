@@ -18,10 +18,6 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
-    - name: Generate Gradle Wrapper
-      working-directory: android
-      run: gradle wrapper --gradle-version 8.7
-
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v4
 
