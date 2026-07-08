@@ -11,8 +11,6 @@ CORS(app)
 
 @app.errorhandler(Exception)
 def handle_exception(e):
-    tb = traceback.format_exc()
-    print(tb)
     return jsonify({'error': str(e)}), 500
 
 @app.route('/')
@@ -52,7 +50,19 @@ def api_2d_to_3d():
         resp.headers['Access-Control-Allow-Origin'] = '*'
         return resp
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        # Fallback: برگرداندن تصویر اصلی در صورت هرگونه خطا
+        try:
+            img_bytes = base64.b64decode(data['image'])
+            img = Image.open(BytesIO(img_bytes)).convert('RGB')
+            img.thumbnail((200, 200))
+            buf = BytesIO()
+            img.save(buf, 'PNG')
+            buf.seek(0)
+            resp = make_response(send_file(buf, mimetype='image/png'))
+            resp.headers['Access-Control-Allow-Origin'] = '*'
+            return resp
+        except:
+            return jsonify({'error': str(e)}), 500
 
 @app.route('/api/draw-shape', methods=['POST'])
 def api_draw_shape():
