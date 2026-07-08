@@ -5,74 +5,65 @@ from skimage.restoration import denoise_bilateral
 
 def generate_obj(img_pil, invert=False, height_scale=40.0, grid_res=60, base_grid=100):
     """
-    مدل سه‌بعدی با سطوح مثلثی مورب (بدون Heightmap ساده)
+    مدل سه‌بعدی با سطوح مثلثی مورب (بدون Heightmap)
     - بازسازی سطح با انتگرال‌گیری سریع از گرادیان‌ها (بدون FFT)
-    - تراکم تطبیقی رئوس در لبه‌ها
+    - تراکم تطبیقی رئوس در لبه‌ها با نمونه‌برداری وزنی سریع
     """
     img_rgb = img_pil.convert('RGB')
     img_gray = img_rgb.convert('L')
     width, height = img_gray.size
-    # کاهش شدید ابعاد برای اجرا در ۱۰ ثانیه
     max_dim = 50
     if max(width, height) > max_dim:
         ratio = max_dim / max(width, height)
         width, height = int(width * ratio), int(height * ratio)
         img_gray = img_gray.resize((width, height), Image.LANCZOS)
         img_rgb = img_rgb.resize((width, height), Image.LANCZOS)
+    if width < 2 or height < 2:
+        raise ValueError("تصویر باید حداقل ۲ پیکسل در هر بعد داشته باشد.")
 
     gray = np.array(img_gray, dtype=np.float32) / 255.0
-
-    # ۱. پیش‌پردازش و گرادیان‌ها
-    gray_smooth = denoise_bilateral(gray, sigma_color=0.1, sigma_spatial=1.5,
-                                    channel_axis=None)
+    gray_smooth = denoise_bilateral(gray, sigma_color=0.1, sigma_spatial=1.5, channel_axis=None)
     dzdx, dzdy = np.gradient(gray_smooth)
 
-    # ۲. انتگرال‌گیری سریع (بازسازی سطح تقریبی)
-    #     با جمع زدن گرادیان‌ها در راستای x و y و میانگین‌گیری
+    # انتگرال‌گیری سریع
     h, w = gray.shape
     zx = np.cumsum(dzdx, axis=1)
     zy = np.cumsum(dzdy, axis=0)
-    # تصحیح میانگین
     depth_map = (zx + zy) / 2.0
     depth_map = (depth_map - depth_map.min()) / (depth_map.max() - depth_map.min() + 1e-9)
-
     if invert:
         depth_map = 1.0 - depth_map
 
-    # ۳. نمونه‌برداری تطبیقی (نقاط متراکم‌تر روی لبه‌ها)
-    xx_base, yy_base = np.meshgrid(
-        np.linspace(0, w-1, base_grid),
-        np.linspace(0, h-1, base_grid)
-    )
+    # نمونه‌برداری تطبیقی سریع: انتخاب نقاط با احتمال وزنی
+    xx_base = np.tile(np.linspace(0, w-1, base_grid), base_grid)
+    yy_base = np.repeat(np.linspace(0, h-1, base_grid), base_grid)
     from scipy.ndimage import map_coordinates
-    weight_on_base = np.abs(map_coordinates(depth_map, [yy_base, xx_base], order=1, mode='nearest')) + 0.1
-    probs = weight_on_base.flatten() / weight_on_base.sum()
+    coords = np.vstack([yy_base, xx_base])
+    weight_on_base = np.abs(map_coordinates(depth_map, coords, order=1, mode='nearest')) + 0.1
+    probs = weight_on_base / weight_on_base.sum()
 
-    chosen_indices = np.random.choice(base_grid * base_grid, size=grid_res * grid_res,
-                                      replace=False, p=probs)
-    chosen_y = yy_base.flatten()[chosen_indices]
-    chosen_x = xx_base.flatten()[chosen_indices]
+    # انتخاب بدون جایگذاری با استفاده از آرایه‌های تصادفی (سریعتر از choice)
+    n_select = grid_res * grid_res
+    indices = np.random.choice(base_grid * base_grid, size=n_select, replace=False, p=probs)
+    chosen_y = yy_base[indices]
+    chosen_x = xx_base[indices]
 
     points_2d = np.column_stack([chosen_x, chosen_y])
     tri = Delaunay(points_2d)
 
-    # ۴. عمق نهایی
     zz = depth_map[(np.clip(chosen_y.astype(int), 0, h-1),
                     np.clip(chosen_x.astype(int), 0, w-1))] * height_scale
 
-    # ۵. رنگ‌ها
     img_resized = img_rgb.resize((base_grid, base_grid), Image.LANCZOS)
     colors = np.array(img_resized, dtype=np.float32) / 255.0
-    colors = colors.reshape(-1, 3)[chosen_indices]
+    colors = colors.reshape(-1, 3)[indices]
 
-    # ۶. مختصات
     vertices = np.column_stack([
         chosen_x / w * 100.0,
         chosen_y / h * 100.0,
         zz
     ])
 
-    # ۷. نرمال‌های رأسی (میانگین نرمال وجه‌های همسایه)
     normals = np.zeros_like(vertices)
     for simplex in tri.simplices:
         v0, v1, v2 = vertices[simplex[0]], vertices[simplex[1]], vertices[simplex[2]]
@@ -84,8 +75,7 @@ def generate_obj(img_pil, invert=False, height_scale=40.0, grid_res=60, base_gri
     normals[mask] /= np.linalg.norm(normals[mask], axis=1, keepdims=True)
     normals[~mask] = np.array([0, 0, 1])
 
-    # ۸. نوشتن OBJ
-    lines = ["# Refrigitz Faceted Mesh (Fast Integration)"]
+    lines = ["# Refrigitz Olympic Faceted Mesh"]
     for v, c, n in zip(vertices, colors, normals):
         lines.append(f"v {v[0]:.4f} {v[1]:.4f} {v[2]:.4f} {c[0]:.4f} {c[1]:.4f} {c[2]:.4f}")
         lines.append(f"vn {n[0]:.4f} {n[1]:.4f} {n[2]:.4f}")

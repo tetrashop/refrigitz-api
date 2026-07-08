@@ -3,25 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Refrigitz Graphic – 3D Studio</title>
+    <title>Refrigitz Graphic – 3D Studio Pro</title>
     <style>
-        body, html { margin: 0; padding: 0; overflow: hidden; font-family: 'Segoe UI', Tahoma, sans-serif; }
-        #container { display: flex; height: 100vh; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; overflow: hidden; height: 100vh; }
+        #container { display: flex; height: 100%; }
         #sidebar { width: 320px; background: #1e293b; color: #e2e8f0; display: flex; flex-direction: column; overflow-y: auto; transition: width 0.3s; }
         #sidebar.collapsed { width: 0; padding: 0; overflow: hidden; }
         #viewer { flex: 1; position: relative; }
         .panel { padding: 1rem; border-bottom: 1px solid #334155; }
         .panel h3 { margin: 0 0 0.5rem 0; font-size: 1.1rem; color: #38bdf8; }
-        button, .btn { background: #2563eb; color: white; border: none; border-radius: 0.5rem; padding: 0.5rem 1rem; cursor: pointer; font-size: 0.9rem; }
+        button, .btn { background: #2563eb; color: white; border: none; border-radius: 0.5rem; padding: 0.5rem 1rem; cursor: pointer; font-size: 0.9rem; margin: 0.2rem 0; width: 100%; text-align: center; }
         button:hover { background: #1d4ed8; }
         button:disabled { opacity: 0.5; pointer-events: none; }
         input[type="file"] { display: none; }
-        .file-label { display: inline-block; background: #475569; padding: 0.5rem; border-radius: 0.5rem; cursor: pointer; margin-bottom: 0.5rem; }
-        #paintCanvas { border: 1px solid #475569; border-radius: 0.5rem; background: white; width: 100%; cursor: crosshair; }
+        .file-label { display: inline-block; background: #475569; padding: 0.5rem; border-radius: 0.5rem; cursor: pointer; width: 100%; text-align: center; margin-bottom: 0.5rem; }
+        #paintCanvas { border: 1px solid #475569; border-radius: 0.5rem; background: white; width: 100%; cursor: crosshair; touch-action: none; }
         .toolbar { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.5rem; align-items: center; }
+        .toolbar label { font-size: 0.8rem; }
         #status { position: absolute; bottom: 10px; left: 10px; color: white; background: rgba(0,0,0,0.6); padding: 0.3rem 0.6rem; border-radius: 0.3rem; font-size: 0.8rem; }
         #toggleSidebar { position: absolute; top: 10px; right: 10px; z-index: 10; background: #1e293b; color: white; border: none; border-radius: 0.5rem; padding: 0.5rem; cursor: pointer; font-size: 1.2rem; }
         input[type=range] { width: 100%; }
+        .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #ef4444; color: white; padding: 0.7rem 1.5rem; border-radius: 0.5rem; z-index: 999; display: none; }
     </style>
 </head>
 <body>
@@ -40,26 +43,22 @@
                     <input type="range" id="heightSlider" min="0" max="80" value="40" step="1">
                     <span id="heightValue">40</span>
                 </div>
-                <div class="toolbar">
-                    <label>تعادل لبه/روشنایی (α):</label>
-                    <input type="range" id="alphaSlider" min="0" max="1" step="0.05" value="0.85">
-                    <span id="alphaValue">0.85</span>
-                </div>
                 <button id="btnConvertOBJ">🧊 مدل OBJ</button>
-                <button id="btnConvertPNG" style="margin-top:0.3rem;">✨ تصویر سه‌بعدی</button>
+                <button id="btnConvertPNG">✨ تصویر سه‌بعدی</button>
                 <a id="downloadOBJ" style="display:none;" download="model.obj">⬇️ دانلود OBJ</a>
                 <img id="preview3D" style="width:100%; margin-top:0.5rem; display:none; border-radius:0.5rem;">
+                <button id="clearModels" style="background:#dc2626; margin-top:0.5rem;">🗑️ حذف مدل‌های وارد شده</button>
             </div>
             <div class="panel">
                 <h3>🎨 نقاشی</h3>
                 <canvas id="paintCanvas" width="280" height="200"></canvas>
                 <div class="toolbar">
-                    <button id="brushTool">🖌️ قلم</button>
-                    <button id="eraserTool">🧹 پاک‌کن</button>
-                    <input type="color" id="colorPicker" value="#000000">
-                    <button id="clearCanvas">پاک کردن</button>
+                    <button id="brushTool" style="width:auto;">🖌️ قلم</button>
+                    <button id="eraserTool" style="width:auto;">🧹 پاک‌کن</button>
+                    <input type="color" id="colorPicker" value="#000000" style="height:2rem;">
+                    <button id="clearCanvas" style="width:auto;">پاک کردن</button>
                 </div>
-                <button id="applyTexture" style="margin-top:0.5rem;">اعمال به صفحه سه‌بعدی</button>
+                <button id="applyTexture">اعمال به صفحه سه‌بعدی</button>
                 <button id="paintTo3D">تبدیل نقاشی به ۳بعدی</button>
             </div>
             <div class="panel">
@@ -67,7 +66,7 @@
                 <button id="addBox">مکعب</button>
                 <button id="addSphere">کره</button>
                 <button id="addPlane">صفحه</button>
-                <button id="deleteSelected">حذف انتخاب</button>
+                <button id="deleteSelected" style="background:#b91c1c;">حذف انتخاب</button>
             </div>
         </div>
         <div id="viewer">
@@ -75,14 +74,10 @@
             <div id="status"></div>
         </div>
     </div>
+    <div id="toast" class="toast"></div>
 
     <script type="importmap">
-        {
-            "imports": {
-                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
-            }
-        }
+        { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }
     </script>
 
     <script type="module">
@@ -91,20 +86,25 @@
         import { TransformControls } from 'three/addons/controls/TransformControls.js';
         import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 
-        // ----- Sidebar Toggle -----
+        // ========== Toast ==========
+        const toast = document.getElementById('toast');
+        function showToast(msg, color = '#ef4444') {
+            toast.style.display = 'block';
+            toast.style.background = color;
+            toast.textContent = msg;
+            setTimeout(() => { toast.style.display = 'none'; }, 4000);
+        }
+
+        // ========== Sidebar ==========
         const sidebar = document.getElementById('sidebar');
         const toggleBtn = document.getElementById('toggleSidebar');
         toggleBtn.addEventListener('click', () => {
             sidebar.classList.toggle('collapsed');
             toggleBtn.textContent = sidebar.classList.contains('collapsed') ? '☰' : '✕';
-            setTimeout(() => {
-                renderer.setSize(viewer.clientWidth, viewer.clientHeight);
-                camera.aspect = viewer.clientWidth / viewer.clientHeight;
-                camera.updateProjectionMatrix();
-            }, 300);
+            setTimeout(() => onResize(), 300);
         });
 
-        // ----- 3D Scene Setup -----
+        // ========== 3D Scene ==========
         const viewer = document.getElementById('viewer');
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x1e293b);
@@ -125,7 +125,7 @@
 
         const orbitControls = new OrbitControls(camera, renderer.domElement);
         orbitControls.enableDamping = true;
-        let transformControls = new TransformControls(camera, renderer.domElement);
+        const transformControls = new TransformControls(camera, renderer.domElement);
         transformControls.addEventListener('dragging-changed', (event) => {
             orbitControls.enabled = !event.value;
         });
@@ -147,7 +147,7 @@
             }
         }
 
-        function onMouseDown(event) {
+        renderer.domElement.addEventListener('click', (event) => {
             if (transformControls.dragging) return;
             const rect = renderer.domElement.getBoundingClientRect();
             mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
@@ -160,8 +160,7 @@
                 if (obj && obj.userData.selectable) { selectObject(obj); return; }
             }
             selectObject(null);
-        }
-        renderer.domElement.addEventListener('click', onMouseDown);
+        });
 
         function addObject(geometry, material, name) {
             const mesh = new THREE.Mesh(geometry, material);
@@ -174,8 +173,27 @@
         document.getElementById('addBox').onclick = () => addObject(new THREE.BoxGeometry(1,1,1), new THREE.MeshStandardMaterial({color: 0x3b82f6}), 'مکعب');
         document.getElementById('addSphere').onclick = () => addObject(new THREE.SphereGeometry(0.7,32,32), new THREE.MeshStandardMaterial({color: 0x10b981}), 'کره');
         document.getElementById('addPlane').onclick = () => addObject(new THREE.PlaneGeometry(2,2), new THREE.MeshStandardMaterial({color: 0xf59e0b, side: THREE.DoubleSide}), 'صفحه');
-        document.getElementById('deleteSelected').onclick = () => { if (selectedObject) { scene.remove(selectedObject); selectObject(null); } };
+        document.getElementById('deleteSelected').onclick = () => {
+            if (selectedObject) {
+                scene.remove(selectedObject);
+                selectObject(null);
+            }
+        };
 
+        // پاکسازی مدل‌های OBJ وارد شده
+        document.getElementById('clearModels').onclick = () => {
+            const toRemove = [];
+            scene.traverse((child) => {
+                if (child.userData && child.userData.name === 'مدل سه‌بعدی') toRemove.push(child);
+            });
+            toRemove.forEach(obj => {
+                if (obj.parent) obj.parent.remove(obj);
+                if (selectedObject === obj) selectObject(null);
+            });
+            showToast('مدل‌های وارد شده حذف شدند.', '#10b981');
+        };
+
+        // بارگذاری OBJ
         function loadOBJ(url) {
             const loader = new OBJLoader();
             loader.load(url, (object) => {
@@ -189,18 +207,21 @@
                 object.userData.name = 'مدل سه‌بعدی';
                 scene.add(object);
                 selectObject(object);
-            }, undefined, (error) => { alert('خطا در بارگذاری مدل: ' + error.message); });
+                showToast('مدل با موفقیت بارگذاری شد.', '#10b981');
+            }, undefined, (error) => {
+                showToast('خطا در بارگذاری مدل: ' + error.message);
+            });
         }
 
-        // ----- Conversion -----
+        // ========== Conversion Logic ==========
         const BASE = window.location.origin;
         let lastBase64 = null;
-        document.getElementById('imageUpload').addEventListener('change', function(e) {
+        document.getElementById('imageUpload').addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (!file) return;
             document.getElementById('fileName').textContent = '📎 ' + file.name;
             const reader = new FileReader();
-            reader.onload = function(ev) { lastBase64 = ev.target.result.split(',')[1]; };
+            reader.onload = (ev) => { lastBase64 = ev.target.result.split(',')[1]; };
             reader.readAsDataURL(file);
         });
 
@@ -208,16 +229,11 @@
         const heightValue = document.getElementById('heightValue');
         heightSlider.addEventListener('input', () => { heightValue.textContent = heightSlider.value; });
 
-        const alphaSlider = document.getElementById('alphaSlider');
-        const alphaValue = document.getElementById('alphaValue');
-        alphaSlider.addEventListener('input', () => { alphaValue.textContent = alphaSlider.value; });
-
         async function convertTo3D(format) {
-            if (!lastBase64) { alert('لطفاً یک تصویر انتخاب کنید.'); return; }
+            if (!lastBase64) { showToast('لطفاً یک تصویر انتخاب کنید.'); return; }
             const invert = document.getElementById('invertCheck').checked;
             const height = heightSlider.value;
-            const alpha = alphaSlider.value;
-            const url = `${BASE}/api/2d-to-3d?format=${format}&invert=${invert}&height=${height}&alpha=${alpha}`;
+            const url = `${BASE}/api/2d-to-3d?format=${format}&invert=${invert}&height=${height}`;
             try {
                 const res = await fetch(url, {
                     method: 'POST',
@@ -240,62 +256,96 @@
                     document.getElementById('downloadOBJ').style.display = 'block';
                     loadOBJ(objURL);
                 }
-            } catch (err) { alert('خطا: ' + err.message); }
+            } catch (err) {
+                showToast('خطا: ' + err.message);
+            }
         }
 
         document.getElementById('btnConvertOBJ').onclick = () => convertTo3D('obj');
         document.getElementById('btnConvertPNG').onclick = () => convertTo3D('png');
 
-        // ----- Paint Module -----
+        // ========== Paint Module (with touch support) ==========
         const canvas = document.getElementById('paintCanvas');
         const ctx = canvas.getContext('2d');
         let painting = false, brushColor = '#000000', eraserMode = false;
-        function startPosition(e) { painting = true; draw(e); }
-        function endPosition() { painting = false; ctx.beginPath(); }
+
+        function getPos(e) {
+            const rect = canvas.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            return { x: clientX - rect.left, y: clientY - rect.top };
+        }
+
+        function startPosition(e) {
+            e.preventDefault();
+            painting = true;
+            const pos = getPos(e);
+            ctx.beginPath();
+            ctx.moveTo(pos.x, pos.y);
+        }
+        function endPosition(e) {
+            e.preventDefault();
+            painting = false;
+            ctx.beginPath();
+        }
         function draw(e) {
             if (!painting) return;
-            const rect = canvas.getBoundingClientRect();
-            const x = e.clientX - rect.left, y = e.clientY - rect.top;
-            ctx.lineWidth = eraserMode ? 10 : 3; ctx.lineCap = 'round';
+            e.preventDefault();
+            const pos = getPos(e);
+            ctx.lineWidth = eraserMode ? 10 : 3;
+            ctx.lineCap = 'round';
             ctx.strokeStyle = eraserMode ? '#FFFFFF' : brushColor;
-            ctx.lineTo(x, y); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x, y);
+            ctx.lineTo(pos.x, pos.y);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(pos.x, pos.y);
         }
+
         canvas.addEventListener('mousedown', startPosition);
         canvas.addEventListener('mouseup', endPosition);
         canvas.addEventListener('mousemove', draw);
         canvas.addEventListener('mouseleave', endPosition);
+        canvas.addEventListener('touchstart', startPosition, {passive: false});
+        canvas.addEventListener('touchend', endPosition);
+        canvas.addEventListener('touchmove', draw, {passive: false});
+
         document.getElementById('brushTool').onclick = () => eraserMode = false;
         document.getElementById('eraserTool').onclick = () => eraserMode = true;
         document.getElementById('colorPicker').oninput = (e) => brushColor = e.target.value;
         document.getElementById('clearCanvas').onclick = () => ctx.clearRect(0, 0, canvas.width, canvas.height);
+
         document.getElementById('applyTexture').onclick = () => {
             const dataURL = canvas.toDataURL('image/png');
             const texture = new THREE.TextureLoader().load(dataURL);
             const material = new THREE.MeshStandardMaterial({ map: texture, side: THREE.DoubleSide });
             const plane = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material);
-            plane.userData.selectable = true; plane.userData.name = 'نقاشی';
-            scene.add(plane); selectObject(plane);
+            plane.userData.selectable = true;
+            plane.userData.name = 'نقاشی';
+            scene.add(plane);
+            selectObject(plane);
         };
+
         document.getElementById('paintTo3D').onclick = () => {
             const dataURL = canvas.toDataURL('image/png');
             lastBase64 = dataURL.split(',')[1];
             convertTo3D('obj');
         };
 
+        // ========== Resize Handler ==========
+        function onResize() {
+            camera.aspect = viewer.clientWidth / viewer.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(viewer.clientWidth, viewer.clientHeight);
+        }
+        window.addEventListener('resize', onResize);
+
+        // ========== Animation Loop ==========
         function animate() {
             requestAnimationFrame(animate);
             orbitControls.update();
             renderer.render(scene, camera);
         }
         animate();
-
-        window.addEventListener('resize', () => {
-            setTimeout(() => {
-                renderer.setSize(viewer.clientWidth, viewer.clientHeight);
-                camera.aspect = viewer.clientWidth / viewer.clientHeight;
-                camera.updateProjectionMatrix();
-            }, sidebar.classList.contains('collapsed') ? 300 : 0);
-        });
     </script>
 </body>
 </html>

@@ -34,7 +34,6 @@ def api_2d_to_3d():
         return jsonify({'error': 'No image provided'}), 400
     fmt = request.args.get('format', 'png')
     invert = request.args.get('invert', 'false').lower() == 'true'
-    alpha = float(request.args.get('alpha', 0.85))
     height = float(request.args.get('height', 40.0))
     try:
         img_bytes = base64.b64decode(data['image'])
