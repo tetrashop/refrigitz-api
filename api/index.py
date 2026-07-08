@@ -50,7 +50,6 @@ def api_2d_to_3d():
         resp.headers['Access-Control-Allow-Origin'] = '*'
         return resp
     except Exception as e:
-        # Fallback: برگرداندن تصویر اصلی در صورت هرگونه خطا
         try:
             img_bytes = base64.b64decode(data['image'])
             img = Image.open(BytesIO(img_bytes)).convert('RGB')
