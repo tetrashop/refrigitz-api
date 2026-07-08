@@ -2,19 +2,20 @@ import numpy as np
 from PIL import Image
 from scipy.ndimage import gaussian_filter
 
-def generate_obj(img_pil, invert=False, height_scale=40.0, grid_res=60):
+def generate_obj(img_pil, invert=False, height_scale=40.0, grid_res=80):
     """
-    مدل توخالی پایدار با ضخامت ثابت، شبکهٔ منظم و پردازش فوق‌سریع.
+    مدل توخالی متقارن با مرکز ثقل در میانگین نقاط.
+    سطح پشت = قرینه سطح جلو نسبت به میانگین عمق.
     """
     img_rgb = img_pil.convert('RGB')
     img_gray = img_rgb.convert('L')
-    width = height = grid_res  # مستقیماً روی شبکهٔ نهایی کار می‌کنیم
+    width = height = grid_res
     img_gray = img_gray.resize((grid_res, grid_res), Image.LANCZOS)
     img_rgb  = img_rgb.resize((grid_res, grid_res), Image.LANCZOS)
 
     gray = np.array(img_gray, dtype=np.float32) / 255.0
 
-    # عمق صاف و سریع (Unsharp Masking ملایم)
+    # نقشه عمق صاف
     blurred = gaussian_filter(gray, sigma=3.0)
     detail  = gray - blurred
     depth   = blurred + gaussian_filter(detail, sigma=0.8) * 0.25
@@ -22,15 +23,16 @@ def generate_obj(img_pil, invert=False, height_scale=40.0, grid_res=60):
     if invert:
         depth = 1.0 - depth
 
-    # شبکهٔ یکنواخت
+    # شبکه یکنواخت
     x = np.linspace(0, 100, width)
     y = np.linspace(0, 100, height)
     xx, yy = np.meshgrid(x, y)
     z_front = depth * height_scale
 
-    # ضخامت ثابت (پوسته‌ای یکدست)
-    thickness = height_scale * 0.08
-    z_back = z_front - thickness
+    # مرکز ثقل (میانگین عمق)
+    mean_z = np.mean(z_front)
+    # سطح پشت = قرینه نسبت به mean_z
+    z_back = 2 * mean_z - z_front
 
     vertices_front = np.stack([xx, yy, z_front], axis=-1).reshape(-1, 3)
     vertices_back  = np.stack([xx, yy, z_back],  axis=-1).reshape(-1, 3)
@@ -53,9 +55,9 @@ def generate_obj(img_pil, invert=False, height_scale=40.0, grid_res=60):
     faces_front = np.array(faces_front, dtype=int)
 
     offset = len(vertices_front)
-    faces_back = faces_front[:, ::-1] + offset
+    faces_back = faces_front[:, ::-1] + offset  # معکوس برای نرمال صحیح
 
-    # دیواره‌های جانبی (چهار نوار)
+    # دیواره‌های جانبی
     side_faces = []
     # بالا
     for j in range(width - 1):
@@ -93,7 +95,7 @@ def generate_obj(img_pil, invert=False, height_scale=40.0, grid_res=60):
     normals[~mask] = np.array([0,0,1])
 
     # فایل OBJ
-    lines = ["# Refrigitz Olympic Stable Hollow Shell"]
+    lines = ["# Refrigitz Olympic Symmetric Hollow Shell"]
     for v, c, n in zip(all_vertices, all_colors, normals):
         lines.append(f"v {v[0]:.4f} {v[1]:.4f} {v[2]:.4f} {c[0]:.4f} {c[1]:.4f} {c[2]:.4f}")
         lines.append(f"vn {n[0]:.4f} {n[1]:.4f} {n[2]:.4f}")

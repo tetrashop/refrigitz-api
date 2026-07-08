@@ -47,7 +47,6 @@ def api_2d_to_3d():
         resp.headers['Access-Control-Allow-Origin'] = '*'
         return resp
     except Exception as e:
-        # در صورت هر خطایی، تصویر اصلی را برگردان (هرگز خطای شبکه نده)
         try:
             img = Image.open(BytesIO(base64.b64decode(data['image']))).convert('RGB')
             img.thumbnail((200, 200))
