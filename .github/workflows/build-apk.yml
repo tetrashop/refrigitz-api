@@ -21,23 +21,19 @@ jobs:
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v4
 
-    - name: Generate Gradle Wrapper
-      working-directory: android
-      run: gradle wrapper --gradle-version 8.7
-
     - name: Build APK
       working-directory: android
       run: ./gradlew assembleRelease
-
-    - name: Upload APK to Release
-      uses: softprops/action-gh-release@v2
-      with:
-        files: android/app/build/outputs/apk/release/app-release-unsigned.apk
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Upload APK as Artifact
       uses: actions/upload-artifact@v4
       with:
         name: refrigitz-apk
         path: android/app/build/outputs/apk/release/app-release-unsigned.apk
+
+    - name: Upload APK to Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: android/app/build/outputs/apk/release/app-release-unsigned.apk
+      env:
+        GITHUB_TOKEN: ${{ secrets.GH_PAT }}
