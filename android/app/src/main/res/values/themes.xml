@@ -1,5 +1,5 @@
 <resources>
-    <style name="Theme.AppCompat.Light.NoActionBar" parent="Theme.AppCompat.Light.NoActionBar">
+    <style name="Theme.Refrigitz" parent="Theme.AppCompat.Light.NoActionBar">
         <item name="colorPrimary">#1e293b</item>
         <item name="colorPrimaryDark">#0f172a</item>
         <item name="colorAccent">#3b82f6</item>

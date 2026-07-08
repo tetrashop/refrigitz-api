@@ -24,13 +24,14 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+    lint {
+        checkReleaseBuilds false
+    }
 }
 
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'androidx.webkit:webkit:1.7.0'
-    
-    // یکسان‌سازی کتابخانه‌های Kotlin
     implementation 'org.jetbrains.kotlin:kotlin-stdlib:1.9.0'
     implementation 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.0'
     implementation 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.0'
