@@ -2,8 +2,8 @@
 <html lang="fa" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Refrigitz Graphic – 3D Studio Pro</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Refrigitz 3D Studio Pro</title>
     <style>
         * { margin:0; padding:0; box-sizing:border-box; }
         body { font-family:'Segoe UI', Tahoma, sans-serif; overflow:hidden; height:100vh; }
@@ -86,20 +86,22 @@
         import { TransformControls } from 'three/addons/controls/TransformControls.js';
         import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 
+        // ========== عناصر DOM ==========
         const toast = document.getElementById('toast');
-        function showToast(msg, color='#ef4444') {
+        const showToast = (msg, color='#ef4444') => {
             toast.style.display='block'; toast.style.background=color; toast.textContent=msg;
             setTimeout(()=>{toast.style.display='none';},4000);
-        }
+        };
 
         const sidebar = document.getElementById('sidebar');
         const toggleBtn = document.getElementById('toggleSidebar');
-        toggleBtn.addEventListener('click',()=>{
+        toggleBtn.addEventListener('click', ()=>{
             sidebar.classList.toggle('collapsed');
             toggleBtn.textContent = sidebar.classList.contains('collapsed')?'☰':'✕';
             setTimeout(()=>onResize(),300);
         });
 
+        // ========== تنظیمات صحنه ==========
         const viewer = document.getElementById('viewer');
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x1e293b);
@@ -147,21 +149,23 @@
             selectObject(null);
         });
 
-        function addObject(geo, mat, name){
-            const mesh = new THREE.Mesh(geo, mat);
+        function addObject(geometry, material, name){
+            const mesh = new THREE.Mesh(geometry, material);
             mesh.userData.selectable=true; mesh.userData.name=name;
             scene.add(mesh); selectObject(mesh);
         }
-        document.getElementById('addBox').onclick = ()=>addObject(new THREE.BoxGeometry(1,1,1), new THREE.MeshStandardMaterial({color:0x3b82f6}), 'مکعب');
-        document.getElementById('addSphere').onclick = ()=>addObject(new THREE.SphereGeometry(0.7,32,32), new THREE.MeshStandardMaterial({color:0x10b981}), 'کره');
-        document.getElementById('addPlane').onclick = ()=>addObject(new THREE.PlaneGeometry(2,2), new THREE.MeshStandardMaterial({color:0xf59e0b, side:THREE.DoubleSide}), 'صفحه');
-        document.getElementById('deleteSelected').onclick = ()=>{ if(selectedObject){ scene.remove(selectedObject); selectObject(null); } };
-        document.getElementById('clearModels').onclick = ()=>{
+
+        // ========== دکمه‌های اشیاء پایه ==========
+        document.getElementById('addBox').addEventListener('click', ()=>addObject(new THREE.BoxGeometry(1,1,1), new THREE.MeshStandardMaterial({color:0x3b82f6}), 'مکعب'));
+        document.getElementById('addSphere').addEventListener('click', ()=>addObject(new THREE.SphereGeometry(0.7,32,32), new THREE.MeshStandardMaterial({color:0x10b981}), 'کره'));
+        document.getElementById('addPlane').addEventListener('click', ()=>addObject(new THREE.PlaneGeometry(2,2), new THREE.MeshStandardMaterial({color:0xf59e0b, side:THREE.DoubleSide}), 'صفحه'));
+        document.getElementById('deleteSelected').addEventListener('click', ()=>{ if(selectedObject){ scene.remove(selectedObject); selectObject(null); } });
+        document.getElementById('clearModels').addEventListener('click', ()=>{
             const toRemove = [];
             scene.traverse(child=>{ if(child.userData && child.userData.name==='مدل سه‌بعدی') toRemove.push(child); });
             toRemove.forEach(obj=>{ if(obj.parent) obj.parent.remove(obj); if(selectedObject===obj) selectObject(null); });
             showToast('مدل‌های وارد شده حذف شدند.','#10b981');
-        };
+        });
 
         function loadOBJ(url){
             const loader = new OBJLoader();
@@ -172,9 +176,11 @@
             }, undefined, (error)=>{ showToast('خطا در بارگذاری مدل: '+error.message); });
         }
 
+        // ========== تبدیل ۲بعدی به ۳بعدی ==========
         const BASE = window.location.origin;
         let lastBase64 = null;
-        document.getElementById('imageUpload').addEventListener('change', (e)=>{
+        const imageUpload = document.getElementById('imageUpload');
+        imageUpload.addEventListener('change', (e)=>{
             const file = e.target.files[0];
             if(!file)return;
             document.getElementById('fileName').textContent = '📎 '+file.name;
@@ -214,10 +220,10 @@
             }
         }
 
-        document.getElementById('btnConvertOBJ').onclick = ()=>convertTo3D('obj');
-        document.getElementById('btnConvertPNG').onclick = ()=>convertTo3D('png');
+        document.getElementById('btnConvertOBJ').addEventListener('click', ()=>convertTo3D('obj'));
+        document.getElementById('btnConvertPNG').addEventListener('click', ()=>convertTo3D('png'));
 
-        // Paint module (same as before, with touch)
+        // ========== ماژول نقاشی ==========
         const canvas = document.getElementById('paintCanvas');
         const ctx = canvas.getContext('2d');
         let painting=false, brushColor='#000000', eraserMode=false;
@@ -227,29 +233,41 @@
         function draw(e){ if(!painting)return; e.preventDefault(); const pos=getPos(e); ctx.lineWidth=eraserMode?10:3; ctx.lineCap='round'; ctx.strokeStyle=eraserMode?'#FFFFFF':brushColor; ctx.lineTo(pos.x,pos.y); ctx.stroke(); ctx.beginPath(); ctx.moveTo(pos.x,pos.y); }
         canvas.addEventListener('mousedown',startPosition); canvas.addEventListener('mouseup',endPosition); canvas.addEventListener('mousemove',draw); canvas.addEventListener('mouseleave',endPosition);
         canvas.addEventListener('touchstart',startPosition,{passive:false}); canvas.addEventListener('touchend',endPosition); canvas.addEventListener('touchmove',draw,{passive:false});
-        document.getElementById('brushTool').onclick = ()=>eraserMode=false;
-        document.getElementById('eraserTool').onclick = ()=>eraserMode=true;
-        document.getElementById('colorPicker').oninput = (e)=>brushColor=e.target.value;
-        document.getElementById('clearCanvas').onclick = ()=>ctx.clearRect(0,0,canvas.width,canvas.height);
-        document.getElementById('applyTexture').onclick = ()=>{
+        document.getElementById('brushTool').addEventListener('click', ()=>eraserMode=false);
+        document.getElementById('eraserTool').addEventListener('click', ()=>eraserMode=true);
+        document.getElementById('colorPicker').addEventListener('input', (e)=>brushColor=e.target.value);
+        document.getElementById('clearCanvas').addEventListener('click', ()=>ctx.clearRect(0,0,canvas.width,canvas.height));
+        document.getElementById('applyTexture').addEventListener('click', ()=>{
             const dataURL = canvas.toDataURL('image/png');
             const texture = new THREE.TextureLoader().load(dataURL);
             const material = new THREE.MeshStandardMaterial({map:texture, side:THREE.DoubleSide});
             const plane = new THREE.Mesh(new THREE.PlaneGeometry(2,2), material);
             plane.userData.selectable=true; plane.userData.name='نقاشی';
             scene.add(plane); selectObject(plane);
-        };
-        document.getElementById('paintTo3D').onclick = ()=>{
+        });
+        document.getElementById('paintTo3D').addEventListener('click', ()=>{
             const dataURL = canvas.toDataURL('image/png');
             lastBase64 = dataURL.split(',')[1];
             convertTo3D('obj');
-        };
+        });
 
-        function onResize(){ camera.aspect = viewer.clientWidth / viewer.clientHeight; camera.updateProjectionMatrix(); renderer.setSize(viewer.clientWidth, viewer.clientHeight); }
+        // ========== Resize ==========
+        function onResize(){
+            camera.aspect = viewer.clientWidth / viewer.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(viewer.clientWidth, viewer.clientHeight);
+        }
         window.addEventListener('resize', onResize);
 
-        function animate(){ requestAnimationFrame(animate); orbitControls.update(); renderer.render(scene, camera); }
+        // ========== حلقهٔ رندر ==========
+        function animate(){
+            requestAnimationFrame(animate);
+            orbitControls.update();
+            renderer.render(scene, camera);
+        }
         animate();
+
+        console.log('Refrigitz 3D Studio آماده است.');
     </script>
 </body>
 </html>
