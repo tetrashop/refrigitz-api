@@ -15,11 +15,8 @@ def handle_exception(e):
 
 @app.route('/')
 def index():
-    try:
-        with open('index.html', 'r', encoding='utf-8') as f:
-            return f.read()
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    with open('index.html', 'r', encoding='utf-8') as f:
+        return f.read()
 
 @app.route('/api/health')
 def health():
@@ -50,9 +47,9 @@ def api_2d_to_3d():
         resp.headers['Access-Control-Allow-Origin'] = '*'
         return resp
     except Exception as e:
+        # در صورت هر خطایی، تصویر اصلی را برگردان (هرگز خطای شبکه نده)
         try:
-            img_bytes = base64.b64decode(data['image'])
-            img = Image.open(BytesIO(img_bytes)).convert('RGB')
+            img = Image.open(BytesIO(base64.b64decode(data['image']))).convert('RGB')
             img.thumbnail((200, 200))
             buf = BytesIO()
             img.save(buf, 'PNG')
