@@ -88,17 +88,48 @@
         import { TransformControls } from 'three/addons/controls/TransformControls.js';
         import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 
+        // ========== توابع کمکی ==========
         const toast = document.getElementById('toast');
         const showToast = (msg, color='#ef4444') => {
-            toast.style.display='block'; toast.style.background=color; toast.textContent=msg;
+            toast.style.display='block';
+            toast.style.background=color;
+            toast.textContent = String(msg);
             setTimeout(()=>{toast.style.display='none';},4000);
         };
 
+        // تابع کمکی برای استخراج متن خطا از هر نوع آبجکت
+        function getErrorMessage(err) {
+            if (typeof err === 'string') return err;
+            if (err instanceof Error) return err.message || String(err);
+            if (typeof err === 'object' && err !== null) {
+                if (err.error) return String(err.error);
+                if (err.message) return String(err.message);
+                try { return JSON.stringify(err); } catch { return String(err); }
+            }
+            return String(err);
+        }
+
+        // خواندن خطا از پاسخ fetch
+        async function extractErrorFromResponse(res) {
+            try {
+                const contentType = res.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    const data = await res.json();
+                    return getErrorMessage(data);
+                }
+                const text = await res.text();
+                if (text) return text.substring(0, 200);
+                return `خطای HTTP ${res.status}: ${res.statusText}`;
+            } catch {
+                return `خطای HTTP ${res.status}`;
+            }
+        }
+
+        // ========== منو کناری ==========
         const sidebar = document.getElementById('sidebar');
         const toggleBtn = document.getElementById('toggleSidebar');
         const overlay = document.getElementById('overlay');
 
-        // تابع باز و بسته کردن منو
         function toggleSidebar(forceClose = false) {
             if (forceClose) {
                 sidebar.classList.add('collapsed');
@@ -118,23 +149,18 @@
         }
 
         toggleBtn.addEventListener('click', () => toggleSidebar());
-
-        // بستن منو با کلیک روی فضای خاکستری
         overlay.addEventListener('click', () => toggleSidebar(true));
 
-        // بستن منو با دکمه برگشت گوشی
-        window.addEventListener('popstate', (event) => {
+        window.addEventListener('popstate', (e) => {
             if (!sidebar.classList.contains('collapsed')) {
                 toggleSidebar(true);
-                event.preventDefault();
+                e.preventDefault();
                 history.pushState(null, '');
             }
         });
-
-        // فشار دادن history برای فعال شدن popstate
         history.pushState(null, '');
 
-        // ========== تنظیمات صحنه ==========
+        // ========== صحنه سه‌بعدی ==========
         const viewer = document.getElementById('viewer');
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x1e293b);
@@ -204,8 +230,11 @@
             loader.load(url, (object)=>{
                 object.traverse(child=>{ if(child.isMesh){ child.material = new THREE.MeshStandardMaterial({color:0xffffff, vertexColors:true}); child.userData.selectable=false; } });
                 object.userData.selectable=true; object.userData.name='مدل سه‌بعدی';
-                scene.add(object); selectObject(object); showToast('مدل با موفقیت بارگذاری شد.','#10b981');
-            }, undefined, (error)=>{ showToast('خطا در بارگذاری مدل: '+error.message); });
+                scene.add(object); selectObject(object);
+                showToast('مدل با موفقیت بارگذاری شد.','#10b981');
+            }, undefined, (error)=>{
+                showToast('خطا در بارگذاری مدل: ' + getErrorMessage(error));
+            });
         }
 
         // ========== تبدیل ۲بعدی به ۳بعدی ==========
@@ -230,10 +259,14 @@
             const height = heightSlider.value;
             const url = `${BASE}/api/2d-to-3d?format=${format}&invert=${invert}&height=${height}`;
             try {
-                const res = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({image:lastBase64}) });
+                const res = await fetch(url, {
+                    method:'POST',
+                    headers:{'Content-Type':'application/json'},
+                    body:JSON.stringify({image:lastBase64})
+                });
                 if(!res.ok) {
-                    const errData = await res.json().catch(()=>null);
-                    throw new Error(errData?.error || 'خطای سرور');
+                    const errMsg = await extractErrorFromResponse(res);
+                    throw new Error(errMsg);
                 }
                 if(format==='png'){
                     const blob = await res.blob();
@@ -246,7 +279,9 @@
                     document.getElementById('downloadOBJ').style.display='block';
                     loadOBJ(objURL);
                 }
-            } catch(err) { showToast('خطا: ' + err.message); }
+            } catch(err) {
+                showToast('خطا: ' + getErrorMessage(err));
+            }
         }
 
         document.getElementById('btnConvertOBJ').addEventListener('click', ()=>convertTo3D('obj'));
