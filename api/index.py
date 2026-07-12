@@ -50,9 +50,10 @@ def api_2d_to_3d():
         resp.headers['Access-Control-Allow-Origin'] = '*'
         return resp
     except Exception as e:
+        # Fallback نهایی: تصویر اصلی با حجم کم
         try:
             img = Image.open(BytesIO(base64.b64decode(data['image']))).convert('RGB')
-            img.thumbnail((200, 200))
+            img.thumbnail((100, 100))
             buf = BytesIO()
             img.save(buf, 'PNG')
             buf.seek(0)
@@ -60,7 +61,7 @@ def api_2d_to_3d():
             resp.headers['Access-Control-Allow-Origin'] = '*'
             return resp
         except:
-            return jsonify({'error': str(e)}), 500
+            return jsonify({'error': 'Internal server error'}), 500
 
 @app.route('/api/draw-shape', methods=['POST'])
 def api_draw_shape():
