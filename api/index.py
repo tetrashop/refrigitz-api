@@ -1,10 +1,7 @@
 from flask import Flask, request, jsonify, send_file, make_response
 from flask_cors import CORS
 from io import BytesIO
-from PIL import Image
-import base64, traceback
-from core.converter import process_image_2d_to_3d
-from core.obj_generator import generate_obj
+import base64
 
 app = Flask(__name__)
 CORS(app)
@@ -15,8 +12,11 @@ def handle_exception(e):
 
 @app.route('/')
 def index():
-    with open('index.html', 'r', encoding='utf-8') as f:
-        return f.read()
+    try:
+        with open('index.html', 'r', encoding='utf-8') as f:
+            return f.read()
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/health')
 def health():
@@ -24,6 +24,11 @@ def health():
 
 @app.route('/api/2d-to-3d', methods=['POST'])
 def api_2d_to_3d():
+    # Lazy imports – فقط وقتی واقعاً نیاز است
+    from PIL import Image
+    from core.converter import process_image_2d_to_3d
+    from core.obj_generator import generate_obj
+
     data = request.get_json()
     if not data or 'image' not in data:
         return jsonify({'error': 'No image provided'}), 400
@@ -50,6 +55,7 @@ def api_2d_to_3d():
         resp.headers['Access-Control-Allow-Origin'] = '*'
         return resp
     except Exception as e:
+        # Fallback ایمن
         try:
             img = Image.open(BytesIO(base64.b64decode(data['image']))).convert('RGB')
             img.thumbnail((100, 100))
@@ -64,11 +70,14 @@ def api_2d_to_3d():
 
 @app.route('/api/draw-shape', methods=['POST'])
 def api_draw_shape():
+    from PIL import Image
+    from io import BytesIO
+    from core.shape_drawing import draw_shape
+
     data = request.get_json()
     if not data:
         return jsonify({'error': 'JSON required'}), 400
     try:
-        from core.shape_drawing import draw_shape
         img = draw_shape(data)
         buf = BytesIO()
         img.save(buf, 'PNG')
