@@ -1,11 +1,18 @@
 import numpy as np, math
 from PIL import Image
-from scipy.ndimage import gaussian_filter
+
+def gaussian_blur(arr, sigma=0.5):
+    kernel_size = max(3, int(2 * sigma) | 1)
+    x = np.arange(-kernel_size//2 + 1., kernel_size//2 + 1.)
+    g = np.exp(-x**2 / (2. * sigma**2))
+    g /= g.sum()
+    tmp = np.apply_along_axis(lambda r: np.convolve(r, g, mode='same'), 1, arr)
+    return np.apply_along_axis(lambda c: np.convolve(c, g, mode='same'), 0, tmp)
 
 def process_image_2d_to_3d(img, fg=2):
     img = img.convert('RGB')
     width, height = img.size
-    max_dim = 60
+    max_dim = 30
     if width > max_dim or height > max_dim:
         ratio = min(max_dim / width, max_dim / height)
         width, height = int(width * ratio), int(height * ratio)
@@ -69,6 +76,6 @@ def process_image_2d_to_3d(img, fg=2):
                     e[row, bi * width + col_indices] = c[cx_idx[row, mc], cy_idx2[row, mc]]
 
     for ch in range(3):
-        e[:,:,ch] = gaussian_filter(e[:,:,ch], sigma=0.5)
+        e[:,:,ch] = gaussian_blur(e[:,:,ch])
     e = np.clip(e, 0, 255).astype(np.uint8)
     return Image.fromarray(e, 'RGB')
