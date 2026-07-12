@@ -6,7 +6,7 @@
     <title>Refrigitz 3D Studio Pro</title>
     <style>
         * { margin:0; padding:0; box-sizing:border-box; }
-        body { font-family:'Segoe UI', Tahoma, sans-serif; overflow:hidden; height:100vh; }
+        body { font-family:'Segoe UI', Tahoma, sans-serif; overflow:hidden; height:100vh; background:#1e293b; }
         #container { display:flex; height:100%; }
         #sidebar { width:320px; background:#1e293b; color:#e2e8f0; display:flex; flex-direction:column; overflow-y:auto; transition:width 0.3s; position:relative; z-index:20; }
         #sidebar.collapsed { width:0; padding:0; overflow:hidden; }
@@ -20,13 +20,16 @@
         .file-label { display:inline-block; background:#475569; padding:0.5rem; border-radius:0.5rem; cursor:pointer; width:100%; text-align:center; margin-bottom:0.5rem; }
         #paintCanvas { border:1px solid #475569; border-radius:0.5rem; background:white; width:100%; cursor:crosshair; touch-action:none; }
         .toolbar { display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.5rem; align-items:center; }
-        .toolbar label { font-size:0.8rem; }
         #status { position:absolute; bottom:10px; left:10px; color:white; background:rgba(0,0,0,0.6); padding:0.3rem 0.6rem; border-radius:0.3rem; font-size:0.8rem; }
         #toggleSidebar { position:absolute; top:10px; right:10px; z-index:30; background:#1e293b; color:white; border:none; border-radius:0.5rem; padding:0.5rem; cursor:pointer; font-size:1.2rem; }
         input[type=range] { width:100%; }
         .toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#ef4444; color:white; padding:0.7rem 1.5rem; border-radius:0.5rem; z-index:999; display:none; }
         #overlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.3); z-index:15; }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/TransformControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/loaders/OBJLoader.js"></script>
 </head>
 <body>
     <div id="container">
@@ -78,258 +81,231 @@
     </div>
     <div id="toast" class="toast"></div>
 
-    <script type="importmap">
-        { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }
-    </script>
-
-    <script type="module">
-        import * as THREE from 'three';
-        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-        import { TransformControls } from 'three/addons/controls/TransformControls.js';
-        import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
-
-        // ========== توابع کمکی ==========
-        const toast = document.getElementById('toast');
-        const showToast = (msg, color='#ef4444') => {
-            toast.style.display='block';
-            toast.style.background=color;
-            toast.textContent = String(msg);
-            setTimeout(()=>{toast.style.display='none';},4000);
-        };
-
-        // تابع کمکی برای استخراج متن خطا از هر نوع آبجکت
-        function getErrorMessage(err) {
-            if (typeof err === 'string') return err;
-            if (err instanceof Error) return err.message || String(err);
-            if (typeof err === 'object' && err !== null) {
-                if (err.error) return String(err.error);
-                if (err.message) return String(err.message);
-                try { return JSON.stringify(err); } catch { return String(err); }
+    <script>
+        // ========== بررسی بارگذاری Three.js ==========
+        window.addEventListener('load', function() {
+            if (typeof THREE === 'undefined') {
+                document.body.innerHTML = '<div style="color:white;text-align:center;margin-top:20%;">❌ خطا در بارگذاری کتابخانه سه‌بعدی. لطفاً اتصال اینترنت را بررسی کنید.</div>';
+                return;
             }
-            return String(err);
-        }
+            initApp();
+        });
 
-        // خواندن خطا از پاسخ fetch
-        async function extractErrorFromResponse(res) {
-            try {
-                const contentType = res.headers.get('content-type');
-                if (contentType && contentType.includes('application/json')) {
-                    const data = await res.json();
-                    return getErrorMessage(data);
+        function initApp() {
+            // ========== توابع کمکی ==========
+            const toast = document.getElementById('toast');
+            function showToast(msg, color='#ef4444') {
+                toast.style.display='block'; toast.style.background=color; toast.textContent = String(msg);
+                setTimeout(()=>{toast.style.display='none';},4000);
+            }
+            function getErrorMessage(err) {
+                if (typeof err === 'string') return err;
+                if (err instanceof Error) return err.message || String(err);
+                if (typeof err === 'object' && err !== null) {
+                    if (err.error) return String(err.error);
+                    if (err.message) return String(err.message);
+                    try { return JSON.stringify(err); } catch { return String(err); }
                 }
-                const text = await res.text();
-                if (text) return text.substring(0, 200);
-                return `خطای HTTP ${res.status}: ${res.statusText}`;
-            } catch {
-                return `خطای HTTP ${res.status}`;
+                return String(err);
             }
-        }
+            async function extractErrorFromResponse(res) {
+                try {
+                    const ct = res.headers.get('content-type');
+                    if (ct && ct.includes('application/json')) {
+                        const data = await res.json();
+                        return getErrorMessage(data);
+                    }
+                    const text = await res.text();
+                    if (text) return text.substring(0, 200);
+                    return `خطای HTTP ${res.status}: ${res.statusText}`;
+                } catch { return `خطای HTTP ${res.status}`; }
+            }
 
-        // ========== منو کناری ==========
-        const sidebar = document.getElementById('sidebar');
-        const toggleBtn = document.getElementById('toggleSidebar');
-        const overlay = document.getElementById('overlay');
+            // ========== منو کناری ==========
+            const sidebar = document.getElementById('sidebar');
+            const toggleBtn = document.getElementById('toggleSidebar');
+            const overlay = document.getElementById('overlay');
 
-        function toggleSidebar(forceClose = false) {
-            if (forceClose) {
-                sidebar.classList.add('collapsed');
-                toggleBtn.textContent = '☰';
-                overlay.style.display = 'none';
-            } else {
-                sidebar.classList.toggle('collapsed');
-                if (sidebar.classList.contains('collapsed')) {
-                    toggleBtn.textContent = '☰';
-                    overlay.style.display = 'none';
+            function toggleSidebar(forceClose = false) {
+                if (forceClose) {
+                    sidebar.classList.add('collapsed'); toggleBtn.textContent = '☰'; overlay.style.display = 'none';
                 } else {
-                    toggleBtn.textContent = '✕';
-                    overlay.style.display = 'block';
+                    sidebar.classList.toggle('collapsed');
+                    if (sidebar.classList.contains('collapsed')) {
+                        toggleBtn.textContent = '☰'; overlay.style.display = 'none';
+                    } else {
+                        toggleBtn.textContent = '✕'; overlay.style.display = 'block';
+                    }
                 }
+                setTimeout(() => onResize(), 300);
             }
-            setTimeout(() => onResize(), 300);
-        }
-
-        toggleBtn.addEventListener('click', () => toggleSidebar());
-        overlay.addEventListener('click', () => toggleSidebar(true));
-
-        window.addEventListener('popstate', (e) => {
-            if (!sidebar.classList.contains('collapsed')) {
-                toggleSidebar(true);
-                e.preventDefault();
-                history.pushState(null, '');
-            }
-        });
-        history.pushState(null, '');
-
-        // ========== صحنه سه‌بعدی ==========
-        const viewer = document.getElementById('viewer');
-        const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x1e293b);
-        const camera = new THREE.PerspectiveCamera(45, viewer.clientWidth/viewer.clientHeight, 0.1, 1000);
-        camera.position.set(5,5,10);
-        const renderer = new THREE.WebGLRenderer({antialias:true});
-        renderer.setSize(viewer.clientWidth, viewer.clientHeight);
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
-        viewer.appendChild(renderer.domElement);
-
-        scene.add(new THREE.AmbientLight(0xffffff,0.6));
-        const dirLight = new THREE.DirectionalLight(0xffffff,0.8);
-        dirLight.position.set(10,20,5);
-        scene.add(dirLight);
-        scene.add(new THREE.GridHelper(10,10));
-
-        const orbitControls = new OrbitControls(camera, renderer.domElement);
-        orbitControls.enableDamping = true;
-        const transformControls = new TransformControls(camera, renderer.domElement);
-        transformControls.addEventListener('dragging-changed',(event)=>{ orbitControls.enabled = !event.value; });
-        scene.add(transformControls);
-
-        const raycaster = new THREE.Raycaster();
-        const mouse = new THREE.Vector2();
-        let selectedObject = null;
-        function selectObject(obj){
-            if(selectedObject===obj)return;
-            if(selectedObject) transformControls.detach();
-            selectedObject=obj;
-            if(obj){ transformControls.attach(obj); document.getElementById('status').textContent=`انتخاب: ${obj.userData.name||'شیء'}`; }
-            else document.getElementById('status').textContent='';
-        }
-        renderer.domElement.addEventListener('click',(event)=>{
-            if(transformControls.dragging)return;
-            const rect=renderer.domElement.getBoundingClientRect();
-            mouse.x = ((event.clientX-rect.left)/rect.width)*2-1;
-            mouse.y = -((event.clientY-rect.top)/rect.height)*2+1;
-            raycaster.setFromCamera(mouse, camera);
-            const intersects = raycaster.intersectObjects(scene.children, true);
-            if(intersects.length>0){
-                let obj = intersects[0].object;
-                while(obj && !obj.userData.selectable) obj = obj.parent;
-                if(obj && obj.userData.selectable){ selectObject(obj); return; }
-            }
-            selectObject(null);
-        });
-
-        function addObject(geometry, material, name){
-            const mesh = new THREE.Mesh(geometry, material);
-            mesh.userData.selectable=true; mesh.userData.name=name;
-            scene.add(mesh); selectObject(mesh);
-        }
-
-        document.getElementById('addBox').addEventListener('click', ()=>addObject(new THREE.BoxGeometry(1,1,1), new THREE.MeshStandardMaterial({color:0x3b82f6}), 'مکعب'));
-        document.getElementById('addSphere').addEventListener('click', ()=>addObject(new THREE.SphereGeometry(0.7,32,32), new THREE.MeshStandardMaterial({color:0x10b981}), 'کره'));
-        document.getElementById('addPlane').addEventListener('click', ()=>addObject(new THREE.PlaneGeometry(2,2), new THREE.MeshStandardMaterial({color:0xf59e0b, side:THREE.DoubleSide}), 'صفحه'));
-        document.getElementById('deleteSelected').addEventListener('click', ()=>{ if(selectedObject){ scene.remove(selectedObject); selectObject(null); } });
-        document.getElementById('clearModels').addEventListener('click', ()=>{
-            const toRemove = [];
-            scene.traverse(child=>{ if(child.userData && child.userData.name==='مدل سه‌بعدی') toRemove.push(child); });
-            toRemove.forEach(obj=>{ if(obj.parent) obj.parent.remove(obj); if(selectedObject===obj) selectObject(null); });
-            showToast('مدل‌های وارد شده حذف شدند.','#10b981');
-        });
-
-        function loadOBJ(url){
-            const loader = new OBJLoader();
-            loader.load(url, (object)=>{
-                object.traverse(child=>{ if(child.isMesh){ child.material = new THREE.MeshStandardMaterial({color:0xffffff, vertexColors:true}); child.userData.selectable=false; } });
-                object.userData.selectable=true; object.userData.name='مدل سه‌بعدی';
-                scene.add(object); selectObject(object);
-                showToast('مدل با موفقیت بارگذاری شد.','#10b981');
-            }, undefined, (error)=>{
-                showToast('خطا در بارگذاری مدل: ' + getErrorMessage(error));
+            toggleBtn.addEventListener('click', () => toggleSidebar());
+            overlay.addEventListener('click', () => toggleSidebar(true));
+            window.addEventListener('popstate', (e) => {
+                if (!sidebar.classList.contains('collapsed')) {
+                    toggleSidebar(true);
+                    e.preventDefault();
+                    history.pushState(null, '');
+                }
             });
-        }
+            history.pushState(null, '');
 
-        // ========== تبدیل ۲بعدی به ۳بعدی ==========
-        const BASE = window.location.origin;
-        let lastBase64 = null;
-        document.getElementById('imageUpload').addEventListener('change', (e)=>{
-            const file = e.target.files[0];
-            if(!file)return;
-            document.getElementById('fileName').textContent = '📎 '+file.name;
-            const reader = new FileReader();
-            reader.onload = (ev)=>{ lastBase64 = ev.target.result.split(',')[1]; };
-            reader.readAsDataURL(file);
-        });
-
-        const heightSlider = document.getElementById('heightSlider');
-        const heightValue = document.getElementById('heightValue');
-        heightSlider.addEventListener('input', ()=>{ heightValue.textContent = heightSlider.value; });
-
-        async function convertTo3D(format){
-            if(!lastBase64){ showToast('لطفاً یک تصویر انتخاب کنید.'); return; }
-            const invert = document.getElementById('invertCheck').checked;
-            const height = heightSlider.value;
-            const url = `${BASE}/api/2d-to-3d?format=${format}&invert=${invert}&height=${height}`;
-            try {
-                const res = await fetch(url, {
-                    method:'POST',
-                    headers:{'Content-Type':'application/json'},
-                    body:JSON.stringify({image:lastBase64})
-                });
-                if(!res.ok) {
-                    const errMsg = await extractErrorFromResponse(res);
-                    throw new Error(errMsg);
-                }
-                if(format==='png'){
-                    const blob = await res.blob();
-                    document.getElementById('preview3D').src = URL.createObjectURL(blob);
-                    document.getElementById('preview3D').style.display='block';
-                } else if(format==='obj'){
-                    const blob = await res.blob();
-                    const objURL = URL.createObjectURL(blob);
-                    document.getElementById('downloadOBJ').href = objURL;
-                    document.getElementById('downloadOBJ').style.display='block';
-                    loadOBJ(objURL);
-                }
-            } catch(err) {
-                showToast('خطا: ' + getErrorMessage(err));
-            }
-        }
-
-        document.getElementById('btnConvertOBJ').addEventListener('click', ()=>convertTo3D('obj'));
-        document.getElementById('btnConvertPNG').addEventListener('click', ()=>convertTo3D('png'));
-
-        // ========== ماژول نقاشی ==========
-        const canvas = document.getElementById('paintCanvas');
-        const ctx = canvas.getContext('2d');
-        let painting=false, brushColor='#000000', eraserMode=false;
-        function getPos(e){ const rect=canvas.getBoundingClientRect(); const cx=e.touches?e.touches[0].clientX:e.clientX; const cy=e.touches?e.touches[0].clientY:e.clientY; return {x:cx-rect.left, y:cy-rect.top}; }
-        function startPosition(e){ e.preventDefault(); painting=true; const pos=getPos(e); ctx.beginPath(); ctx.moveTo(pos.x,pos.y); }
-        function endPosition(e){ e.preventDefault(); painting=false; ctx.beginPath(); }
-        function draw(e){ if(!painting)return; e.preventDefault(); const pos=getPos(e); ctx.lineWidth=eraserMode?10:3; ctx.lineCap='round'; ctx.strokeStyle=eraserMode?'#FFFFFF':brushColor; ctx.lineTo(pos.x,pos.y); ctx.stroke(); ctx.beginPath(); ctx.moveTo(pos.x,pos.y); }
-        canvas.addEventListener('mousedown',startPosition); canvas.addEventListener('mouseup',endPosition); canvas.addEventListener('mousemove',draw); canvas.addEventListener('mouseleave',endPosition);
-        canvas.addEventListener('touchstart',startPosition,{passive:false}); canvas.addEventListener('touchend',endPosition); canvas.addEventListener('touchmove',draw,{passive:false});
-        document.getElementById('brushTool').addEventListener('click', ()=>eraserMode=false);
-        document.getElementById('eraserTool').addEventListener('click', ()=>eraserMode=true);
-        document.getElementById('colorPicker').addEventListener('input', (e)=>brushColor=e.target.value);
-        document.getElementById('clearCanvas').addEventListener('click', ()=>ctx.clearRect(0,0,canvas.width,canvas.height));
-        document.getElementById('applyTexture').addEventListener('click', ()=>{
-            const dataURL = canvas.toDataURL('image/png');
-            const texture = new THREE.TextureLoader().load(dataURL);
-            const material = new THREE.MeshStandardMaterial({map:texture, side:THREE.DoubleSide});
-            const plane = new THREE.Mesh(new THREE.PlaneGeometry(2,2), material);
-            plane.userData.selectable=true; plane.userData.name='نقاشی';
-            scene.add(plane); selectObject(plane);
-        });
-        document.getElementById('paintTo3D').addEventListener('click', ()=>{
-            const dataURL = canvas.toDataURL('image/png');
-            lastBase64 = dataURL.split(',')[1];
-            convertTo3D('obj');
-        });
-
-        function onResize(){
-            camera.aspect = viewer.clientWidth / viewer.clientHeight;
-            camera.updateProjectionMatrix();
+            // ========== صحنه سه‌بعدی ==========
+            const viewer = document.getElementById('viewer');
+            const scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1e293b);
+            const camera = new THREE.PerspectiveCamera(45, viewer.clientWidth/viewer.clientHeight, 0.1, 1000);
+            camera.position.set(5,5,10);
+            const renderer = new THREE.WebGLRenderer({antialias:true});
             renderer.setSize(viewer.clientWidth, viewer.clientHeight);
-        }
-        window.addEventListener('resize', onResize);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+            viewer.appendChild(renderer.domElement);
 
-        function animate(){
-            requestAnimationFrame(animate);
-            orbitControls.update();
-            renderer.render(scene, camera);
-        }
-        animate();
+            scene.add(new THREE.AmbientLight(0xffffff,0.6));
+            const dirLight = new THREE.DirectionalLight(0xffffff,0.8);
+            dirLight.position.set(10,20,5); scene.add(dirLight);
+            scene.add(new THREE.GridHelper(10,10));
 
-        console.log('Refrigitz 3D Studio آماده است.');
+            const orbitControls = new THREE.OrbitControls(camera, renderer.domElement);
+            orbitControls.enableDamping = true;
+            const transformControls = new THREE.TransformControls(camera, renderer.domElement);
+            transformControls.addEventListener('dragging-changed', (event) => { orbitControls.enabled = !event.value; });
+            scene.add(transformControls);
+
+            const raycaster = new THREE.Raycaster();
+            const mouse = new THREE.Vector2();
+            let selectedObject = null;
+            function selectObject(obj){
+                if(selectedObject===obj)return;
+                if(selectedObject) transformControls.detach();
+                selectedObject=obj;
+                if(obj){ transformControls.attach(obj); document.getElementById('status').textContent=`انتخاب: ${obj.userData.name||'شیء'}`; }
+                else document.getElementById('status').textContent='';
+            }
+            renderer.domElement.addEventListener('click', (event)=>{
+                if(transformControls.dragging)return;
+                const rect=renderer.domElement.getBoundingClientRect();
+                mouse.x = ((event.clientX-rect.left)/rect.width)*2-1;
+                mouse.y = -((event.clientY-rect.top)/rect.height)*2+1;
+                raycaster.setFromCamera(mouse, camera);
+                const intersects = raycaster.intersectObjects(scene.children, true);
+                if(intersects.length>0){
+                    let obj = intersects[0].object;
+                    while(obj && !obj.userData.selectable) obj = obj.parent;
+                    if(obj && obj.userData.selectable){ selectObject(obj); return; }
+                }
+                selectObject(null);
+            });
+
+            function addObject(geo, mat, name){
+                const mesh = new THREE.Mesh(geo, mat);
+                mesh.userData.selectable=true; mesh.userData.name=name;
+                scene.add(mesh); selectObject(mesh);
+            }
+
+            document.getElementById('addBox').addEventListener('click', ()=>addObject(new THREE.BoxGeometry(1,1,1), new THREE.MeshStandardMaterial({color:0x3b82f6}), 'مکعب'));
+            document.getElementById('addSphere').addEventListener('click', ()=>addObject(new THREE.SphereGeometry(0.7,32,32), new THREE.MeshStandardMaterial({color:0x10b981}), 'کره'));
+            document.getElementById('addPlane').addEventListener('click', ()=>addObject(new THREE.PlaneGeometry(2,2), new THREE.MeshStandardMaterial({color:0xf59e0b, side:THREE.DoubleSide}), 'صفحه'));
+            document.getElementById('deleteSelected').addEventListener('click', ()=>{ if(selectedObject){ scene.remove(selectedObject); selectObject(null); } });
+            document.getElementById('clearModels').addEventListener('click', ()=>{
+                const toRemove = [];
+                scene.traverse(child=>{ if(child.userData && child.userData.name==='مدل سه‌بعدی') toRemove.push(child); });
+                toRemove.forEach(obj=>{ if(obj.parent) obj.parent.remove(obj); if(selectedObject===obj) selectObject(null); });
+                showToast('مدل‌های وارد شده حذف شدند.','#10b981');
+            });
+
+            function loadOBJ(url){
+                const loader = new THREE.OBJLoader();
+                loader.load(url, (object)=>{
+                    object.traverse(child=>{ if(child.isMesh){ child.material = new THREE.MeshStandardMaterial({color:0xffffff, vertexColors:true}); child.userData.selectable=false; } });
+                    object.userData.selectable=true; object.userData.name='مدل سه‌بعدی';
+                    scene.add(object); selectObject(object); showToast('مدل با موفقیت بارگذاری شد.','#10b981');
+                }, undefined, (error)=>{ showToast('خطا در بارگذاری مدل: ' + getErrorMessage(error)); });
+            }
+
+            // ========== تبدیل ۲بعدی به ۳بعدی ==========
+            const BASE = window.location.origin;
+            let lastBase64 = null;
+            document.getElementById('imageUpload').addEventListener('change', (e)=>{
+                const file = e.target.files[0];
+                if(!file)return;
+                document.getElementById('fileName').textContent = '📎 '+file.name;
+                const reader = new FileReader();
+                reader.onload = (ev)=>{ lastBase64 = ev.target.result.split(',')[1]; };
+                reader.readAsDataURL(file);
+            });
+
+            const heightSlider = document.getElementById('heightSlider');
+            const heightValue = document.getElementById('heightValue');
+            heightSlider.addEventListener('input', ()=>{ heightValue.textContent = heightSlider.value; });
+
+            async function convertTo3D(format){
+                if(!lastBase64){ showToast('لطفاً یک تصویر انتخاب کنید.'); return; }
+                const invert = document.getElementById('invertCheck').checked;
+                const height = heightSlider.value;
+                const url = `${BASE}/api/2d-to-3d?format=${format}&invert=${invert}&height=${height}`;
+                try {
+                    const res = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({image:lastBase64}) });
+                    if(!res.ok) { throw new Error(await extractErrorFromResponse(res)); }
+                    if(format==='png'){
+                        const blob = await res.blob();
+                        document.getElementById('preview3D').src = URL.createObjectURL(blob);
+                        document.getElementById('preview3D').style.display='block';
+                    } else if(format==='obj'){
+                        const blob = await res.blob();
+                        const objURL = URL.createObjectURL(blob);
+                        document.getElementById('downloadOBJ').href = objURL;
+                        document.getElementById('downloadOBJ').style.display='block';
+                        loadOBJ(objURL);
+                    }
+                } catch(err) { showToast('خطا: ' + getErrorMessage(err)); }
+            }
+
+            document.getElementById('btnConvertOBJ').addEventListener('click', ()=>convertTo3D('obj'));
+            document.getElementById('btnConvertPNG').addEventListener('click', ()=>convertTo3D('png'));
+
+            // ========== ماژول نقاشی ==========
+            const canvas = document.getElementById('paintCanvas');
+            const ctx = canvas.getContext('2d');
+            let painting=false, brushColor='#000000', eraserMode=false;
+            function getPos(e){ const rect=canvas.getBoundingClientRect(); const cx=e.touches?e.touches[0].clientX:e.clientX; const cy=e.touches?e.touches[0].clientY:e.clientY; return {x:cx-rect.left, y:cy-rect.top}; }
+            function startPosition(e){ e.preventDefault(); painting=true; const pos=getPos(e); ctx.beginPath(); ctx.moveTo(pos.x,pos.y); }
+            function endPosition(e){ e.preventDefault(); painting=false; ctx.beginPath(); }
+            function draw(e){ if(!painting)return; e.preventDefault(); const pos=getPos(e); ctx.lineWidth=eraserMode?10:3; ctx.lineCap='round'; ctx.strokeStyle=eraserMode?'#FFFFFF':brushColor; ctx.lineTo(pos.x,pos.y); ctx.stroke(); ctx.beginPath(); ctx.moveTo(pos.x,pos.y); }
+            canvas.addEventListener('mousedown',startPosition); canvas.addEventListener('mouseup',endPosition); canvas.addEventListener('mousemove',draw); canvas.addEventListener('mouseleave',endPosition);
+            canvas.addEventListener('touchstart',startPosition,{passive:false}); canvas.addEventListener('touchend',endPosition); canvas.addEventListener('touchmove',draw,{passive:false});
+            document.getElementById('brushTool').addEventListener('click', ()=>eraserMode=false);
+            document.getElementById('eraserTool').addEventListener('click', ()=>eraserMode=true);
+            document.getElementById('colorPicker').addEventListener('input', (e)=>brushColor=e.target.value);
+            document.getElementById('clearCanvas').addEventListener('click', ()=>ctx.clearRect(0,0,canvas.width,canvas.height));
+            document.getElementById('applyTexture').addEventListener('click', ()=>{
+                const dataURL = canvas.toDataURL('image/png');
+                const texture = new THREE.TextureLoader().load(dataURL);
+                const material = new THREE.MeshStandardMaterial({map:texture, side:THREE.DoubleSide});
+                const plane = new THREE.Mesh(new THREE.PlaneGeometry(2,2), material);
+                plane.userData.selectable=true; plane.userData.name='نقاشی';
+                scene.add(plane); selectObject(plane);
+            });
+            document.getElementById('paintTo3D').addEventListener('click', ()=>{
+                const dataURL = canvas.toDataURL('image/png');
+                lastBase64 = dataURL.split(',')[1];
+                convertTo3D('obj');
+            });
+
+            function onResize(){
+                camera.aspect = viewer.clientWidth / viewer.clientHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(viewer.clientWidth, viewer.clientHeight);
+            }
+            window.addEventListener('resize', onResize);
+
+            function animate(){
+                requestAnimationFrame(animate);
+                orbitControls.update();
+                renderer.render(scene, camera);
+            }
+            animate();
+        }
     </script>
 </body>
 </html>
