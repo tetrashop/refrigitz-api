@@ -1,11 +1,11 @@
 import numpy as np, math
 from PIL import Image
-from scipy.ndimage import median_filter
+from scipy.ndimage import gaussian_filter
 
 def process_image_2d_to_3d(img, fg=2):
     img = img.convert('RGB')
     width, height = img.size
-    max_dim = 70
+    max_dim = 50
     if width > max_dim or height > max_dim:
         ratio = min(max_dim / width, max_dim / height)
         width, height = int(width * ratio), int(height * ratio)
@@ -71,7 +71,8 @@ def process_image_2d_to_3d(img, fg=2):
                     col_indices = np.arange(width)[mc]
                     e[row, bi * width + col_indices] = c[cx_idx[row, mc], cy_idx2[row, mc]]
 
+    # استفاده از فیلتر گوسی سریع به جای median_filter کند
     for ch in range(3):
-        e[:,:,ch] = median_filter(e[:,:,ch], size=2)
+        e[:,:,ch] = gaussian_filter(e[:,:,ch], sigma=0.5)
     e = np.clip(e, 0, 255).astype(np.uint8)
     return Image.fromarray(e, 'RGB')

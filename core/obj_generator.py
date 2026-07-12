@@ -2,12 +2,8 @@ import numpy as np
 from PIL import Image
 from scipy.ndimage import gaussian_filter
 
-def generate_obj(img_pil, invert=False, height_scale=40.0, grid_res=80, floor_z=0.0):
-    """
-    مدل توخالی هوشمند:
-    - اگر floor_z داده شود (پیش‌فرض 0)، سطح پشت روی همان z قرار می‌گیرد (نه دوبرابر رگرسیون).
-    - در غیر این صورت رگرسیون متقارن (centroid at mean) فعال است.
-    """
+def generate_obj(img_pil, invert=False, height_scale=40.0, grid_res=60, floor_z=0.0):
+    """نسخهٔ بهینه‌شده با grid_res کاهش‌یافته و محاسبات برداری سریع"""
     img_rgb = img_pil.convert('RGB')
     img_gray = img_rgb.convert('L')
     width = height = grid_res
@@ -15,12 +11,8 @@ def generate_obj(img_pil, invert=False, height_scale=40.0, grid_res=80, floor_z=
     img_rgb  = img_rgb.resize((grid_res, grid_res), Image.LANCZOS)
 
     gray = np.array(img_gray, dtype=np.float32) / 255.0
-
-    # عمق صاف
-    blurred = gaussian_filter(gray, sigma=3.0)
-    detail  = gray - blurred
-    depth   = blurred + gaussian_filter(detail, sigma=0.8) * 0.25
-    depth   = (depth - depth.min()) / (depth.max() - depth.min() + 1e-9)
+    blurred = gaussian_filter(gray, sigma=2.5)  # کمی تیزتر برای جبران کاهش رزولوشن
+    depth   = (blurred - blurred.min()) / (blurred.max() - blurred.min() + 1e-9)
     if invert:
         depth = 1.0 - depth
 
@@ -28,13 +20,7 @@ def generate_obj(img_pil, invert=False, height_scale=40.0, grid_res=80, floor_z=
     y = np.linspace(0, 100, height)
     xx, yy = np.meshgrid(x, y)
     z_front = depth * height_scale
-
-    # سطح پشت هوشمند
-    if floor_z is not None:
-        z_back = np.full_like(z_front, floor_z)
-    else:
-        mean_z = np.mean(z_front)
-        z_back = 2 * mean_z - z_front
+    z_back  = np.where(floor_z is not None, floor_z, 2 * np.mean(z_front) - z_front)
 
     vertices_front = np.stack([xx, yy, z_front], axis=-1).reshape(-1, 3)
     vertices_back  = np.stack([xx, yy, z_back],  axis=-1).reshape(-1, 3)
@@ -44,39 +30,40 @@ def generate_obj(img_pil, invert=False, height_scale=40.0, grid_res=80, floor_z=
     colors_flat = colors.reshape(-1, 3)
     all_colors = np.vstack([colors_flat, colors_flat])
 
-    faces_front = []
-    for i in range(height - 1):
-        for j in range(width - 1):
-            a = i * width + j
-            b = a + 1
-            c = (i + 1) * width + j
-            d = c + 1
-            faces_front.append([a, b, d])
-            faces_front.append([a, d, c])
-    faces_front = np.array(faces_front, dtype=int)
+    # مثلث‌بندی با استفاده از np.indices (برداری)
+    rows, cols = np.indices((height-1, width-1))
+    a = rows * width + cols
+    b = a + 1
+    c = (rows + 1) * width + cols
+    d = c + 1
+
+    faces_front = np.empty(((height-1)*(width-1)*2, 3), dtype=int)
+    faces_front[0::2, 0] = a.ravel()
+    faces_front[0::2, 1] = b.ravel()
+    faces_front[0::2, 2] = d.ravel()
+    faces_front[1::2, 0] = a.ravel()
+    faces_front[1::2, 1] = d.ravel()
+    faces_front[1::2, 2] = c.ravel()
 
     offset = len(vertices_front)
     faces_back = faces_front[:, ::-1] + offset
 
-    # دیواره‌های جانبی
+    # دیواره‌های جانبی (همان ساختار قبلی)
     side_faces = []
     for j in range(width - 1):
-        a, b = j, j+1
-        c, d = a+offset, b+offset
-        side_faces.extend([[a,b,d],[a,d,c]])
+        side_faces.append([j, j+1, j+offset+1])
+        side_faces.append([j, j+offset+1, j+offset])
     base = (height-1)*width
     for j in range(width - 1):
-        a, b = base+j, base+j+1
-        c, d = a+offset, b+offset
-        side_faces.extend([[a,b,d],[a,d,c]])
+        side_faces.append([base+j, base+j+1, base+j+offset+1])
+        side_faces.append([base+j, base+j+offset+1, base+j+offset])
     for i in range(height - 1):
-        a, b = i*width, (i+1)*width
-        c, d = a+offset, b+offset
-        side_faces.extend([[a,b,d],[a,d,c]])
+        side_faces.append([i*width, (i+1)*width, (i+1)*width+offset])
+        side_faces.append([i*width, (i+1)*width+offset, i*width+offset])
     for i in range(height - 1):
-        a, b = i*width+(width-1), (i+1)*width+(width-1)
-        c, d = a+offset, b+offset
-        side_faces.extend([[a,b,d],[a,d,c]])
+        side_faces.append([i*width+(width-1), (i+1)*width+(width-1), (i+1)*width+(width-1)+offset])
+        side_faces.append([i*width+(width-1), (i+1)*width+(width-1)+offset, i*width+(width-1)+offset])
+    side_faces = np.array(side_faces, dtype=int)
 
     all_faces = np.vstack([faces_front, faces_back, side_faces])
 
@@ -90,7 +77,7 @@ def generate_obj(img_pil, invert=False, height_scale=40.0, grid_res=80, floor_z=
     normals[mask] /= np.linalg.norm(normals[mask], axis=1, keepdims=True)
     normals[~mask] = np.array([0,0,1])
 
-    lines = ["# Refrigitz Olympic Smart Hollow Shell"]
+    lines = ["# Refrigitz Olympic Optimized Hollow Shell"]
     for v, c, n in zip(all_vertices, all_colors, normals):
         lines.append(f"v {v[0]:.4f} {v[1]:.4f} {v[2]:.4f} {c[0]:.4f} {c[1]:.4f} {c[2]:.4f}")
         lines.append(f"vn {n[0]:.4f} {n[1]:.4f} {n[2]:.4f}")
