@@ -50,7 +50,6 @@ def api_2d_to_3d():
         resp.headers['Access-Control-Allow-Origin'] = '*'
         return resp
     except Exception as e:
-        # Fallback نهایی: تصویر اصلی با حجم کم
         try:
             img = Image.open(BytesIO(base64.b64decode(data['image']))).convert('RGB')
             img.thumbnail((100, 100))
