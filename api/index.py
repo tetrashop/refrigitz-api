@@ -30,11 +30,14 @@ def api_2d_to_3d():
     fmt = request.args.get('format', 'png')
     invert = request.args.get('invert', 'false').lower() == 'true'
     height = float(request.args.get('height', 40.0))
+    floor = request.args.get('floor', None)
+    if floor is not None:
+        floor = float(floor)
     try:
         img_bytes = base64.b64decode(data['image'])
         img = Image.open(BytesIO(img_bytes)).convert('RGB')
         if fmt == 'obj':
-            obj_data = generate_obj(img, invert=invert, height_scale=height)
+            obj_data = generate_obj(img, invert=invert, height_scale=height, floor_z=floor)
             buf = BytesIO(obj_data)
             resp = make_response(send_file(buf, mimetype='application/octet-stream',
                                            as_attachment=True, download_name='model.obj'))

@@ -8,7 +8,7 @@
         * { margin:0; padding:0; box-sizing:border-box; }
         body { font-family:'Segoe UI', Tahoma, sans-serif; overflow:hidden; height:100vh; }
         #container { display:flex; height:100%; }
-        #sidebar { width:320px; background:#1e293b; color:#e2e8f0; display:flex; flex-direction:column; overflow-y:auto; transition:width 0.3s; }
+        #sidebar { width:320px; background:#1e293b; color:#e2e8f0; display:flex; flex-direction:column; overflow-y:auto; transition:width 0.3s; position:relative; z-index:20; }
         #sidebar.collapsed { width:0; padding:0; overflow:hidden; }
         #viewer { flex:1; position:relative; }
         .panel { padding:1rem; border-bottom:1px solid #334155; }
@@ -22,9 +22,10 @@
         .toolbar { display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.5rem; align-items:center; }
         .toolbar label { font-size:0.8rem; }
         #status { position:absolute; bottom:10px; left:10px; color:white; background:rgba(0,0,0,0.6); padding:0.3rem 0.6rem; border-radius:0.3rem; font-size:0.8rem; }
-        #toggleSidebar { position:absolute; top:10px; right:10px; z-index:10; background:#1e293b; color:white; border:none; border-radius:0.5rem; padding:0.5rem; cursor:pointer; font-size:1.2rem; }
+        #toggleSidebar { position:absolute; top:10px; right:10px; z-index:30; background:#1e293b; color:white; border:none; border-radius:0.5rem; padding:0.5rem; cursor:pointer; font-size:1.2rem; }
         input[type=range] { width:100%; }
         .toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#ef4444; color:white; padding:0.7rem 1.5rem; border-radius:0.5rem; z-index:999; display:none; }
+        #overlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.3); z-index:15; }
     </style>
 </head>
 <body>
@@ -69,6 +70,7 @@
                 <button id="deleteSelected" style="background:#b91c1c;">حذف انتخاب</button>
             </div>
         </div>
+        <div id="overlay"></div>
         <div id="viewer">
             <button id="toggleSidebar">☰</button>
             <div id="status"></div>
@@ -86,7 +88,6 @@
         import { TransformControls } from 'three/addons/controls/TransformControls.js';
         import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 
-        // ========== عناصر DOM ==========
         const toast = document.getElementById('toast');
         const showToast = (msg, color='#ef4444') => {
             toast.style.display='block'; toast.style.background=color; toast.textContent=msg;
@@ -95,11 +96,43 @@
 
         const sidebar = document.getElementById('sidebar');
         const toggleBtn = document.getElementById('toggleSidebar');
-        toggleBtn.addEventListener('click', ()=>{
-            sidebar.classList.toggle('collapsed');
-            toggleBtn.textContent = sidebar.classList.contains('collapsed')?'☰':'✕';
-            setTimeout(()=>onResize(),300);
+        const overlay = document.getElementById('overlay');
+
+        // تابع باز و بسته کردن منو
+        function toggleSidebar(forceClose = false) {
+            if (forceClose) {
+                sidebar.classList.add('collapsed');
+                toggleBtn.textContent = '☰';
+                overlay.style.display = 'none';
+            } else {
+                sidebar.classList.toggle('collapsed');
+                if (sidebar.classList.contains('collapsed')) {
+                    toggleBtn.textContent = '☰';
+                    overlay.style.display = 'none';
+                } else {
+                    toggleBtn.textContent = '✕';
+                    overlay.style.display = 'block';
+                }
+            }
+            setTimeout(() => onResize(), 300);
+        }
+
+        toggleBtn.addEventListener('click', () => toggleSidebar());
+
+        // بستن منو با کلیک روی فضای خاکستری
+        overlay.addEventListener('click', () => toggleSidebar(true));
+
+        // بستن منو با دکمه برگشت گوشی
+        window.addEventListener('popstate', (event) => {
+            if (!sidebar.classList.contains('collapsed')) {
+                toggleSidebar(true);
+                event.preventDefault();
+                history.pushState(null, '');
+            }
         });
+
+        // فشار دادن history برای فعال شدن popstate
+        history.pushState(null, '');
 
         // ========== تنظیمات صحنه ==========
         const viewer = document.getElementById('viewer');
@@ -155,7 +188,6 @@
             scene.add(mesh); selectObject(mesh);
         }
 
-        // ========== دکمه‌های اشیاء پایه ==========
         document.getElementById('addBox').addEventListener('click', ()=>addObject(new THREE.BoxGeometry(1,1,1), new THREE.MeshStandardMaterial({color:0x3b82f6}), 'مکعب'));
         document.getElementById('addSphere').addEventListener('click', ()=>addObject(new THREE.SphereGeometry(0.7,32,32), new THREE.MeshStandardMaterial({color:0x10b981}), 'کره'));
         document.getElementById('addPlane').addEventListener('click', ()=>addObject(new THREE.PlaneGeometry(2,2), new THREE.MeshStandardMaterial({color:0xf59e0b, side:THREE.DoubleSide}), 'صفحه'));
@@ -179,8 +211,7 @@
         // ========== تبدیل ۲بعدی به ۳بعدی ==========
         const BASE = window.location.origin;
         let lastBase64 = null;
-        const imageUpload = document.getElementById('imageUpload');
-        imageUpload.addEventListener('change', (e)=>{
+        document.getElementById('imageUpload').addEventListener('change', (e)=>{
             const file = e.target.files[0];
             if(!file)return;
             document.getElementById('fileName').textContent = '📎 '+file.name;
@@ -215,9 +246,7 @@
                     document.getElementById('downloadOBJ').style.display='block';
                     loadOBJ(objURL);
                 }
-            } catch(err) {
-                showToast('خطا: ' + err.message);
-            }
+            } catch(err) { showToast('خطا: ' + err.message); }
         }
 
         document.getElementById('btnConvertOBJ').addEventListener('click', ()=>convertTo3D('obj'));
@@ -251,7 +280,6 @@
             convertTo3D('obj');
         });
 
-        // ========== Resize ==========
         function onResize(){
             camera.aspect = viewer.clientWidth / viewer.clientHeight;
             camera.updateProjectionMatrix();
@@ -259,7 +287,6 @@
         }
         window.addEventListener('resize', onResize);
 
-        // ========== حلقهٔ رندر ==========
         function animate(){
             requestAnimationFrame(animate);
             orbitControls.update();
