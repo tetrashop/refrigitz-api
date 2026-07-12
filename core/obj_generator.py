@@ -2,18 +2,23 @@ import numpy as np
 from PIL import Image
 
 def gaussian_blur(arr, sigma=2.0):
-    """فیلتر گوسی دستی با NumPy – جایگزین scipy"""
-    kernel_size = int(2 * sigma) | 1  # فرد
+    kernel_size = int(2 * sigma) | 1
     x = np.arange(-kernel_size//2 + 1., kernel_size//2 + 1.)
     g = np.exp(-x**2 / (2. * sigma**2))
     g /= g.sum()
-    # اعمال جداگانه روی سطرها و ستون‌ها
     tmp = np.apply_along_axis(lambda r: np.convolve(r, g, mode='same'), 1, arr)
     return np.apply_along_axis(lambda c: np.convolve(c, g, mode='same'), 0, tmp)
 
-def generate_obj(img_pil, invert=False, height_scale=40.0, grid_res=40, floor_z=0.0):
+def generate_obj(img_pil, invert=False, height_scale=40.0, grid_res=None, floor_z=0.0):
     img_rgb = img_pil.convert('RGB')
     img_gray = img_rgb.convert('L')
+    
+    # تطبیق هوشمند grid_res: سقف ۶۰، ولی اگر تصویر کوچک‌تر باشد از ابعاد اصلی استفاده کن
+    w, h = img_gray.size
+    if grid_res is None:
+        grid_res = min(max(w, h), 60)
+        grid_res = max(grid_res, 20)  # حداقل ۲۰
+    
     width = height = grid_res
     img_gray = img_gray.resize((grid_res, grid_res), Image.LANCZOS)
     img_rgb  = img_rgb.resize((grid_res, grid_res), Image.LANCZOS)
@@ -73,7 +78,7 @@ def generate_obj(img_pil, invert=False, height_scale=40.0, grid_res=40, floor_z=
     normals[mask] /= np.linalg.norm(normals[mask], axis=1, keepdims=True)
     normals[~mask] = np.array([0,0,1])
 
-    lines = ["# Refrigitz Ultra-Fast Hollow Shell"]
+    lines = ["# Refrigitz Adaptive Hollow Shell"]
     for v, c, n in zip(all_vertices, all_colors, normals):
         lines.append(f"v {v[0]:.4f} {v[1]:.4f} {v[2]:.4f} {c[0]:.4f} {c[1]:.4f} {c[2]:.4f}")
         lines.append(f"vn {n[0]:.4f} {n[1]:.4f} {n[2]:.4f}")

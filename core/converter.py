@@ -12,11 +12,21 @@ def gaussian_blur(arr, sigma=0.5):
 def process_image_2d_to_3d(img, fg=2):
     img = img.convert('RGB')
     width, height = img.size
-    max_dim = 30
-    if width > max_dim or height > max_dim:
-        ratio = min(max_dim / width, max_dim / height)
-        width, height = int(width * ratio), int(height * ratio)
+    
+    # تطبیق هوشمند اندازه: سقف ۳۶۰۰ پیکسل (معادل ۶۰×۶۰)
+    MAX_PIXELS = 3600
+    current_pixels = width * height
+    if current_pixels > MAX_PIXELS:
+        ratio = (MAX_PIXELS / current_pixels) ** 0.5
+        width = int(width * ratio)
+        height = int(height * ratio)
         img = img.resize((width, height), Image.LANCZOS)
+    # حداقل ابعاد ۲۰ پیکسل
+    width = max(width, 20)
+    height = max(height, 20)
+    if width != img.width or height != img.height:
+        img = img.resize((width, height), Image.LANCZOS)
+
     pixels = np.array(img, dtype=np.float32)
 
     i_idx = np.arange(width, dtype=np.float32) - width/2

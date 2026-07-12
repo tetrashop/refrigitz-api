@@ -34,7 +34,11 @@ def api_2d_to_3d():
         img_bytes = base64.b64decode(data['image'])
         img = Image.open(BytesIO(img_bytes)).convert('RGB')
         if fmt == 'obj':
-            obj_data = generate_obj(img, invert=invert, height_scale=height)
+            # grid_res هوشمند: می‌توان از پارامتر query استفاده کرد (اختیاری)
+            grid = request.args.get('grid')
+            if grid is not None:
+                grid = int(grid)
+            obj_data = generate_obj(img, invert=invert, height_scale=height, grid_res=grid)
             buf = BytesIO(obj_data)
             resp = make_response(send_file(buf, mimetype='application/octet-stream',
                                            as_attachment=True, download_name='model.obj'))
