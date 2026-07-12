@@ -3,10 +3,9 @@ from PIL import Image
 from scipy.ndimage import gaussian_filter
 
 def process_image_2d_to_3d(img, fg=2):
-    """نسخهٔ پایدار و فوق‌سریع با max_dim=50 و فیلتر گوسی"""
     img = img.convert('RGB')
     width, height = img.size
-    max_dim = 50
+    max_dim = 60
     if width > max_dim or height > max_dim:
         ratio = min(max_dim / width, max_dim / height)
         width, height = int(width * ratio), int(height * ratio)
